@@ -1,0 +1,147 @@
+{
+    "R9QDGB": {
+        "reservation_id": "R9QDGB",
+        "user_id": "mei_hernandez_8984",
+        "origin": "LAX",
+        "destination": "BOS",
+        "flight_type": "round_trip",
+        "cabin": "economy",
+        "flights": [
+            {
+                "origin": "LAX",
+                "destination": "SFO",
+                "flight_number": "HAT034",
+                "date": "2024-05-28",
+                "price": 143
+            },
+            {
+                "origin": "SFO",
+                "destination": "BOS",
+                "flight_number": "HAT026",
+                "date": "2024-05-28",
+                "price": 194
+            },
+            {
+                "origin": "BOS",
+                "destination": "MIA",
+                "flight_number": "HAT247",
+                "date": "2024-05-30",
+                "price": 126
+            },
+            {
+                "origin": "MIA",
+                "destination": "LAX",
+                "flight_number": "HAT232",
+                "date": "2024-05-30",
+                "price": 144
+            }
+        ],
+        "passengers": [
+            { "first_name": "Mei", "last_name": "Hernandez", "dob": "1981-01-11" },
+            { "first_name": "Liam", "last_name": "Kovacs", "dob": "1996-08-21" },
+            { "first_name": "Anya", "last_name": "Anderson", "dob": "1959-05-28" }
+        ],
+        "payment_history": [{ "payment_id": "credit_card_6082923", "amount": 1911 }],
+        "created_at": "2024-05-01T00:33:44",
+        "total_baggages": 0,
+        "nonfree_baggages": 0,
+        "insurance": "yes"
+    },
+    "YKCIBO": {
+        "reservation_id": "YKCIBO",
+        "user_id": "emma_jackson_2190",
+        "origin": "BOS",
+        "destination": "BOS",
+        "flight_type": "one_way",
+        "cabin": "business",
+        "flights": [
+            {
+                "origin": "BOS",
+                "destination": "MIA",
+                "flight_number": "HAT086",
+                "date": "2024-05-20",
+                "price": 1313
+            },
+            {
+                "origin": "MIA",
+                "destination": "BOS",
+                "flight_number": "HAT184",
+                "date": "2024-05-20",
+                "price": 446
+            }
+        ],
+        "passengers": [
+            { "first_name": "Emma", "last_name": "Jackson", "dob": "1986-12-22" },
+            { "first_name": "Amelia", "last_name": "Lee", "dob": "1976-03-24" },
+            { "first_name": "Lei", "last_name": "Martin", "dob": "1963-06-22" }
+        ],
+        "payment_history": [{ "payment_id": "credit_card_8869451", "amount": 5367 }],
+        "created_at": "2024-05-13T01:46:10",
+        "total_baggages": 1,
+        "nonfree_baggages": 0,
+        "insurance": "yes"
+    },
+    "H0S6OC": {
+        "reservation_id": "H0S6OC",
+        "user_id": "aarav_nguyen_1055",
+        "origin": "ORD",
+        "destination": "ORD",
+        "flight_type": "one_way",
+        "cabin": "business",
+        "flights": [
+            {
+                "origin": "ORD",
+                "destination": "IAH",
+                "flight_number": "HAT147",
+                "date": "2024-05-25",
+                "price": 1147
+            },
+            {
+                "origin": "IAH",
+                "destination": "ORD",
+                "flight_number": "HAT044",
+                "date": "2024-05-25",
+                "price": 1799
+            }
+        ],
+        "passengers": [
+            { "first_name": "Mohamed", "last_name": "Johnson", "dob": "1981-07-16" },
+            { "first_name": "Olivia", "last_name": "Patel", "dob": "1978-09-01" }
+        ],
+        "payment_history": [{ "payment_id": "credit_card_4319822", "amount": 5952 }],
+        "created_at": "2024-05-01T04:46:25",
+        "total_baggages": 3,
+        "nonfree_baggages": 0,
+        "insurance": "yes"
+    },
+    "V5HUST": {
+        "reservation_id": "V5HUST",
+        "user_id": "sophia_muller_9002",
+        "origin": "LAS",
+        "destination": "ATL",
+        "flight_type": "round_trip",
+        "cabin": "business",
+        "flights": [
+            {
+                "origin": "LAS",
+                "destination": "ATL",
+                "flight_number": "HAT070",
+                "date": "2024-05-27",
+                "price": 1523
+            },
+            {
+                "origin": "ATL",
+                "destination": "LAS",
+                "flight_number": "HAT281",
+                "date": "2024-05-29",
+                "price": 1864
+            }
+        ],
+        "passengers": [{ "first_name": "Evelyn", "last_name": "Davis", "dob": "1971-01-23" }],
+        "payment_history": [{ "payment_id": "gift_card_3286428", "amount": 3387 }],
+        "created_at": "2024-05-03T11:25:48",
+        "total_baggages": 1,
+        "nonfree_baggages": 0,
+        "insurance": "no"
+    }
+}

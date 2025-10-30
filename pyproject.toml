@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socratic"
+version = "0.1.0"
+description = "Socratic: Automated Knowledge Synthesis for Vertical LLM Agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "openai>=1.0.0",
+  "inquirerpy>=0.3.4",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+socratic = "socratic.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["socratic*"]
+
+

@@ -1,0 +1,6 @@
+playbooks/
+old/
+socratic.egg-info/
+socratic/__pycache__/
+tmp/
+projects/
