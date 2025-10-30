@@ -49,12 +49,12 @@ Convert synthesized knowledge into prompts that are ready to be dropped directly
 ## Installation
 
 ```bash
-git clone https://github.com/kevins981/socratic_prototype.git
-cd socratic_prototype
+git clone https://github.com/kevins981/Socratic.git
+cd socratic
 
 # optional
-conda create -n socratic_prototype python=3.10 -y
-conda activate socratic_prototype
+conda create -n socratic python=3.10 -y
+conda activate socratic
 
 # install
 pip install -e .
