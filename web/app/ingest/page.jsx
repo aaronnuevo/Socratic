@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelectedFiles } from '../selected-files-context';
 
 export default function IngestPage() {
@@ -11,6 +11,92 @@ export default function IngestPage() {
   const { selectedPaths, setSelectedPaths, activePath, setActivePath } = useSelectedFiles();
   const [fileContents, setFileContents] = useState({}); // path -> content
   const [loadingContent, setLoadingContent] = useState(false);
+  const [selectedDir, setSelectedDir] = useState('');
+  const [ingestSession, setIngestSession] = useState(null); // { id, status }
+  const [logLines, setLogLines] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const eventSourceRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('source'); // 'source' | 'agent'
+
+  function ansiToHtml(input) {
+    if (!input) return '';
+    const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const colorMap = {
+      30: '#000000', 31: '#dc2626', 32: '#16a34a', 33: '#ca8a04', 34: '#2563eb', 35: '#7c3aed', 36: '#0891b2', 37: '#e5e7eb',
+      90: '#6b7280', 91: '#ef4444', 92: '#22c55e', 93: '#eab308', 94: '#3b82f6', 95: '#a855f7', 96: '#06b6d4', 97: '#ffffff'
+    };
+    let html = '';
+    let i = 0;
+    let openSpan = null; // { color, fontWeight }
+    const open = (style) => {
+      const parts = [];
+      if (style.fontWeight === 'bold') parts.push('font-weight:bold');
+      if (style.color) parts.push(`color:${style.color}`);
+      html += `<span style="${parts.join(';')}">`;
+      openSpan = style;
+    };
+    const close = () => {
+      if (openSpan) {
+        html += '</span>';
+        openSpan = null;
+      }
+    };
+    const len = input.length;
+    while (i < len) {
+      const ch = input.charCodeAt(i);
+      if (ch === 27 /* ESC */ && i + 1 < len && input[i + 1] === '[') {
+        // Parse CSI "\x1b[...m"
+        let j = i + 2;
+        let codeStr = '';
+        while (j < len && input[j] !== 'm') {
+          codeStr += input[j++];
+        }
+        if (j < len && input[j] === 'm') {
+          // Apply SGR codes
+          const codes = codeStr.split(';').filter(Boolean).map((c) => parseInt(c, 10));
+          // Reset default when empty
+          if (codes.length === 0) codes.push(0);
+          // Build new style
+          let nextStyle = openSpan ? { ...openSpan } : { color: null, fontWeight: null };
+          for (const code of codes) {
+            if (code === 0) { // reset
+              nextStyle = { color: null, fontWeight: null };
+            } else if (code === 1) { // bold
+              nextStyle.fontWeight = 'bold';
+            } else if (code >= 30 && code <= 37) {
+              nextStyle.color = colorMap[code] || nextStyle.color;
+            } else if (code >= 90 && code <= 97) {
+              nextStyle.color = colorMap[code] || nextStyle.color;
+            } else if (code === 39) { // default fg
+              nextStyle.color = null;
+            } else if (code === 22) { // normal intensity
+              nextStyle.fontWeight = null;
+            }
+            // Background and extended colors skipped for simplicity
+          }
+          // If style changed, close/open
+          const changed = !openSpan || openSpan.color !== nextStyle.color || openSpan.fontWeight !== nextStyle.fontWeight;
+          if (changed) {
+            close();
+            if (nextStyle.color || nextStyle.fontWeight) open(nextStyle);
+          }
+          i = j + 1;
+          continue;
+        }
+      }
+      // Regular char
+      if (input[i] === '\n') {
+        html += '\n';
+      } else if (input[i] === '\r') {
+        // skip carriage return
+      } else {
+        html += escapeHtml(input[i]);
+      }
+      i++;
+    }
+    close();
+    return html;
+  }
 
   const hasSelection = selectedPaths.length > 0;
 
@@ -63,15 +149,90 @@ export default function IngestPage() {
     );
   }
 
-  function confirmSelection() {
-    setShowPicker(false);
-    if (selectedPaths.length > 0 && (!activePath || !selectedPaths.includes(activePath))) {
-      setActivePath(selectedPaths[0]);
+  async function confirmSelection() {
+    try {
+      if (!currentDir) {
+        setShowPicker(false);
+        return;
+      }
+      const resp = await fetch(`/api/dir-files?dir=${encodeURIComponent(currentDir)}`);
+      const data = await resp.json();
+      if (Array.isArray(data?.files)) {
+        setSelectedPaths(data.files);
+        setSelectedDir(currentDir);
+        if (!activePath || (data.files.length > 0 && !data.files.includes(activePath))) {
+          setActivePath(data.files[0] || null);
+        }
+      } else {
+        setSelectedPaths([]);
+        setSelectedDir(currentDir);
+      }
+    } catch {
+      setSelectedPaths([]);
+      setSelectedDir(currentDir || '');
+    } finally {
+      setShowPicker(false);
     }
   }
 
   function cancelSelection() {
     setShowPicker(false);
+  }
+
+  async function startIngest() {
+    if (!selectedDir || (ingestSession && ingestSession.status === 'running')) return;
+    try {
+      // Close previous stream if any
+      try {
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+          eventSourceRef.current = null;
+        }
+      } catch {}
+      setLogLines([]);
+      const resp = await fetch('/api/ingest/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputDir: selectedDir })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || 'Failed to start ingest');
+      const sessionId = data.sessionId;
+      setIngestSession({ id: sessionId, status: 'running' });
+      setActiveTab('agent');
+      const es = new EventSource(`/api/ingest/stream?session=${encodeURIComponent(sessionId)}`);
+      eventSourceRef.current = es;
+      es.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          if (payload.type === 'log' && typeof payload.line === 'string') {
+            setLogLines((prev) => [...prev, payload.line]);
+          } else if (payload.type === 'status') {
+            setIngestSession((prev) => (prev ? { ...prev, status: payload.status || prev.status } : prev));
+          }
+        } catch {}
+      };
+      es.onerror = () => {
+        // ignore; connection issues handled by browser EventSource
+      };
+    } catch (err) {
+      setLogLines((prev) => [...prev, `[ERR] ${err?.message || 'Failed to start ingest'}`]);
+    }
+  }
+
+  async function submitInput() {
+    if (!ingestSession || ingestSession.status !== 'running' || !inputText) return;
+    const text = inputText;
+    setInputText('');
+    // Echo user input to the console immediately
+    setLogLines((prev) => [...prev, `› ${text}`]);
+    try {
+      await fetch('/api/ingest/input', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: ingestSession.id, text })
+      });
+    } catch {}
   }
 
   useEffect(() => {
@@ -115,14 +276,9 @@ export default function IngestPage() {
                     <span style={styles.dirName}>📁 {item.name}</span>
                   </div>
                 ) : (
-                  <label key={item.path} style={styles.checkboxRow}>
-                    <input
-                      type="checkbox"
-                      checked={selectedPaths.includes(item.path)}
-                      onChange={() => togglePath(item.path)}
-                    />
-                    <span style={styles.checkboxLabel}>{item.name}</span>
-                  </label>
+                  <div key={item.path} style={styles.checkboxRow}>
+                    <span style={{ ...styles.checkboxLabel, color: '#666' }}>{item.name}</span>
+                  </div>
                 )
               ))}
             </div>
@@ -130,7 +286,7 @@ export default function IngestPage() {
         </div>
         <div style={styles.modalFooter}>
           <button onClick={cancelSelection} style={styles.buttonSecondary}>Cancel</button>
-          <button onClick={confirmSelection} style={styles.buttonPrimary}>Select</button>
+          <button onClick={confirmSelection} style={styles.buttonPrimary}>Use this directory</button>
         </div>
       </div>
     </div>
@@ -139,43 +295,102 @@ export default function IngestPage() {
   return (
     <div>
       <h1>Ingest</h1>
-      {!hasSelection ? (
-        <div style={styles.emptyPicker} onClick={openPicker}>
-          <div>Click to select files</div>
-        </div>
-      ) : (
-        <div style={styles.paneContainer}>
-          <div style={styles.leftPane}>
-            <div style={styles.leftHeader}>
-              <span>Selected files</span>
-              <button onClick={openPicker} style={styles.linkButton}>Change</button>
+
+      <div style={styles.tabsHeader}>
+        <button onClick={() => setActiveTab('source')} style={activeTab === 'source' ? styles.tabActive : styles.tab}>Source files</button>
+        <button onClick={() => setActiveTab('agent')} style={activeTab === 'agent' ? styles.tabActive : styles.tab}>Agent</button>
+      </div>
+
+      {activeTab === 'source' ? (
+        <>
+          {selectedDir ? (
+            <div style={styles.selectedDirBar}>
+              <span style={styles.selectedDirLabel}>Current directory:</span>
+              <span style={styles.selectedDirValue}>{selectedDir}</span>
             </div>
-            <div style={styles.leftList}>
-              {selectedPaths.map((p) => (
-                <div
-                  key={p}
-                  onClick={() => setActivePath(p)}
-                  style={p === activePath ? styles.listItemActive : styles.listItem}
-                  title={p}
-                >
-                  {p}
+          ) : null}
+          <div style={styles.ingestBar}>
+            <button
+              style={styles.buttonPrimary}
+              onClick={startIngest}
+              disabled={!selectedDir || !!(ingestSession && ingestSession.status === 'running')}
+            >
+              Ingest
+            </button>
+            {ingestSession ? (
+              <span style={styles.runStatus}>
+                {ingestSession.status === 'running' ? 'Running…' : ingestSession.status === 'exited' ? 'Completed' : ingestSession.status}
+              </span>
+            ) : null}
+          </div>
+
+          {!hasSelection ? (
+            <div style={styles.emptyPicker} onClick={openPicker}>
+              <div>Click to select directory</div>
+            </div>
+          ) : (
+            <div style={styles.paneContainer}>
+              <div style={styles.leftPane}>
+                <div style={styles.leftHeader}>
+                  <span>Selected files</span>
+                  <button onClick={openPicker} style={styles.linkButton}>Change</button>
                 </div>
-              ))}
+                <div style={styles.leftList}>
+                  {selectedPaths.map((p) => (
+                    <div
+                      key={p}
+                      onClick={() => setActivePath(p)}
+                      style={p === activePath ? styles.listItemActive : styles.listItem}
+                      title={p}
+                    >
+                      {p}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={styles.rightPane}>
+                <div style={styles.rightHeader}>{activePath || 'No file selected'}</div>
+                <div style={styles.viewer}>
+                  {activePath ? (
+                    loadingContent && !fileContents[activePath] ? (
+                      <div>Loading…</div>
+                    ) : (
+                      <pre style={styles.pre}>{fileContents[activePath] || ''}</pre>
+                    )
+                  ) : null}
+                </div>
+              </div>
             </div>
-          </div>
-          <div style={styles.rightPane}>
-            <div style={styles.rightHeader}>{activePath || 'No file selected'}</div>
-            <div style={styles.viewer}>
-              {activePath ? (
-                loadingContent && !fileContents[activePath] ? (
-                  <div>Loading…</div>
-                ) : (
-                  <pre style={styles.pre}>{fileContents[activePath] || ''}</pre>
-                )
-              ) : null}
+          )}
+        </>
+      ) : (
+        // Agent tab: console only
+        <>
+          {ingestSession ? (
+            <div style={styles.logContainer}>
+              <div style={styles.logHeader}>
+                <span>{ingestSession.status === 'running' ? 'Running…' : ingestSession.status === 'exited' ? 'Completed' : ingestSession.status}</span>
+              </div>
+              <div style={styles.logBox}>
+                <pre style={styles.pre} dangerouslySetInnerHTML={{ __html: ansiToHtml(logLines.join('\n')) }} />
+              </div>
+              <div style={styles.inputRow}>
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Type response for ingest script…"
+                  style={styles.textInput}
+                  disabled={ingestSession.status !== 'running'}
+                  onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); }}
+                />
+                <button onClick={submitInput} style={styles.buttonSecondary} disabled={!inputText || ingestSession.status !== 'running'}>
+                  Send
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+          ) : null}
+        </>
       )}
 
       {picker}
@@ -184,6 +399,51 @@ export default function IngestPage() {
 }
 
 const styles = {
+  selectedDirBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8
+  },
+  selectedDirLabel: {
+    color: '#555'
+  },
+  selectedDirValue: {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontSize: 12,
+    color: '#333'
+  },
+  ingestBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16
+  },
+  runStatus: {
+    color: '#666'
+  },
+  tabsHeader: {
+    display: 'flex',
+    gap: 8,
+    borderBottom: '1px solid #eee',
+    marginBottom: 12
+  },
+  tab: {
+    padding: '6px 10px',
+    background: '#f3f4f6',
+    color: '#111',
+    border: '1px solid #e5e7eb',
+    borderRadius: 6,
+    cursor: 'pointer'
+  },
+  tabActive: {
+    padding: '6px 10px',
+    background: '#ffffff',
+    color: '#111',
+    border: '1px solid #e5e7eb',
+    borderRadius: 6,
+    cursor: 'pointer'
+  },
   emptyPicker: {
     border: '2px dashed #bbb',
     borderRadius: 8,
@@ -339,6 +599,38 @@ const styles = {
     color: '#2b5cff',
     cursor: 'pointer',
     padding: 0
+  },
+  logContainer: {
+    marginTop: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8
+  },
+  logBox: {
+    border: '1px solid #e2e2e2',
+    borderRadius: 8,
+    padding: 12,
+    height: 440,
+    overflow: 'auto',
+    background: '#0b1020',
+    color: '#e5e7eb'
+  },
+  logHeader: {
+    padding: '8px 12px',
+    border: '1px solid #e2e2e2',
+    borderRadius: 8,
+    background: '#fafafa',
+    color: '#666'
+  },
+  inputRow: {
+    display: 'flex',
+    gap: 8
+  },
+  textInput: {
+    flex: 1,
+    padding: '6px 10px',
+    border: '1px solid #e5e7eb',
+    borderRadius: 6
   }
 };
 
