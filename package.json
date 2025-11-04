@@ -1,0 +1,9 @@
+{
+  "name": "socratic-dev",
+  "private": true,
+  "version": "0.1.0",
+  "bin": {
+    "socratic-web": "bin/socratic-web"
+  }
+}
+
