@@ -403,8 +403,6 @@ export default function ComposePage() {
 
   return (
     <div>
-      <h1>Compose</h1>
-
       <div style={styles.tabsHeader}>
         <button onClick={() => setActiveTab('compose')} style={activeTab === 'compose' ? styles.tabActive : styles.tab}>Compose</button>
         <button onClick={() => setActiveTab('output')} style={activeTab === 'output' ? styles.tabActive : styles.tab}>Output</button>
@@ -617,7 +615,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    padding: '12px',
+    padding: '6px 12px',
   },
   unitLabelArea: {
     display: 'flex',

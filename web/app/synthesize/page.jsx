@@ -442,8 +442,6 @@ export default function SynthesizePage() {
 
   return (
     <div>
-      <h1>Synthesize</h1>
-
       <div style={styles.tabsHeader}>
         <button onClick={() => setActiveTab('source')} style={activeTab === 'source' ? styles.tabActive : styles.tab}>Source files</button>
         <button onClick={() => setActiveTab('agent')} style={activeTab === 'agent' ? styles.tabActive : styles.tab}>Agent</button>

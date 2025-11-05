@@ -32,7 +32,7 @@ body {
 }
 
 .sidebar {
-  width: 220px;
+  width: 160px;
   border-right: 1px solid #e5e7eb;
   padding: 16px;
   background: #fafafa;
@@ -44,9 +44,14 @@ body {
   color: #111827;
   text-decoration: none;
   border-radius: 6px;
+  font-size: 16px;
 }
 
 .nav a:hover {
+  background: #e5e7eb;
+}
+
+.nav a.active {
   background: #e5e7eb;
 }
 
