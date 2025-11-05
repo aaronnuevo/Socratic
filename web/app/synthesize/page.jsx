@@ -21,6 +21,28 @@ export default function SynthesizePage() {
   useEffect(() => {
     const loadState = async () => {
       try {
+        // Get current project root
+        const dirResponse = await fetch('/api/dir');
+        const dirData = await dirResponse.json();
+        const currentProjectRoot = dirData.cwd;
+        
+        // Check if saved data is from the same project
+        const savedProjectRoot = localStorage.getItem('socratic:synthesize:projectRoot');
+        
+        // If project changed, clear all cached data
+        if (savedProjectRoot && savedProjectRoot !== currentProjectRoot) {
+          console.log('Project changed, clearing cached data');
+          localStorage.removeItem('socratic:synthesize:selectedFile');
+          localStorage.removeItem('socratic:synthesize:fileContent');
+          localStorage.removeItem('socratic:synthesize:selectedSourceDir');
+          localStorage.removeItem('socratic:synthesize:session');
+          localStorage.removeItem('socratic:synthesize:logs');
+          localStorage.removeItem('socratic:synthesize:projectRoot');
+        }
+        
+        // Store current project root
+        localStorage.setItem('socratic:synthesize:projectRoot', currentProjectRoot);
+        
         const savedFile = localStorage.getItem('socratic:synthesize:selectedFile');
         const savedContent = localStorage.getItem('socratic:synthesize:fileContent');
         const savedSourceDir = localStorage.getItem('socratic:synthesize:selectedSourceDir');

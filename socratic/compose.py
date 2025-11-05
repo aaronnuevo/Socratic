@@ -177,6 +177,11 @@ def build_compose_parser() -> argparse.ArgumentParser:
         default="gpt-5",
         help="OpenAI model to use.",
     )
+    parser.add_argument(
+        "--units-json-file",
+        default=None,
+        help="Path to JSON file containing pre-selected knowledge units (for web UI mode). If not provided, uses interactive terminal selection.",
+    )
     return parser
 
 
@@ -192,21 +197,38 @@ def run_compose(args: argparse.Namespace) -> None:
         )
     print(f"[INFO] Compose command with project: {args.project}, model: {args.model}")
     
-    # Get all knowledge units from concept files
-    all_units = _get_knowledge_units_from_files(project_dir)
-    
-    if not all_units:
-        print(f"[INFO] No knowledge units found in {project_dir}")
-        return
-    
-    print(f"\n[INFO] Found {len(all_units)} knowledge units")
-    
-    # Show interactive selection interface
-    selected_units = _select_knowledge_units_interactive(all_units)
-    
-    if not selected_units:
-        print("[INFO] No units selected. Exiting.")
-        return
+    # Check if units are provided via JSON file (web UI mode) or need interactive selection (terminal mode)
+    if args.units_json_file:
+        # Web UI mode: load pre-selected units from JSON file
+        try:
+            with open(args.units_json_file, "r") as f:
+                selected_units = json.load(f)
+            
+            if not isinstance(selected_units, list):
+                raise SystemExit("[ERROR] Units JSON file must contain a list of knowledge units.")
+            
+            print(f"[INFO] Loaded {len(selected_units)} pre-selected knowledge units from {args.units_json_file}")
+        except FileNotFoundError:
+            raise SystemExit(f"[ERROR] Units JSON file not found: {args.units_json_file}")
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"[ERROR] Failed to parse units JSON file: {e}")
+    else:
+        # Terminal mode: use interactive selection
+        # Get all knowledge units from concept files
+        all_units = _get_knowledge_units_from_files(project_dir)
+        
+        if not all_units:
+            print(f"[INFO] No knowledge units found in {project_dir}")
+            return
+        
+        print(f"\n[INFO] Found {len(all_units)} knowledge units")
+        
+        # Show interactive selection interface
+        selected_units = _select_knowledge_units_interactive(all_units)
+        
+        if not selected_units:
+            print("[INFO] No units selected. Exiting.")
+            return
     
     # Pass selected units to compose_prompt
     compose_prompt(selected_units, args.model, project_dir)

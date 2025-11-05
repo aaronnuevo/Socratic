@@ -104,31 +104,55 @@ export default function IngestPage() {
 
   // Load persisted session state on mount
   useEffect(() => {
-    try {
-      const savedSession = localStorage.getItem('socratic:ingest:session');
-      const savedLogs = localStorage.getItem('socratic:ingest:logs');
-      const savedDir = localStorage.getItem('socratic:ingest:selectedDir');
-      
-      if (savedDir) {
-        setSelectedDir(savedDir);
-      }
-      if (savedSession) {
-        const session = JSON.parse(savedSession);
-        setIngestSession(session);
+    const loadState = async () => {
+      try {
+        // Get current project root
+        const dirResponse = await fetch('/api/dir');
+        const dirData = await dirResponse.json();
+        const currentProjectRoot = dirData.cwd;
         
-        // Restore logs
-        if (savedLogs) {
-          setLogLines(JSON.parse(savedLogs));
+        // Check if saved data is from the same project
+        const savedProjectRoot = localStorage.getItem('socratic:ingest:projectRoot');
+        
+        // If project changed, clear all cached data
+        if (savedProjectRoot && savedProjectRoot !== currentProjectRoot) {
+          console.log('Project changed, clearing cached data');
+          localStorage.removeItem('socratic:ingest:session');
+          localStorage.removeItem('socratic:ingest:logs');
+          localStorage.removeItem('socratic:ingest:selectedDir');
+          localStorage.removeItem('socratic:ingest:projectRoot');
         }
         
-        // If session is still running, reconnect to the stream
-        if (session.status === 'running') {
-          reconnectToSession(session.id);
+        // Store current project root
+        localStorage.setItem('socratic:ingest:projectRoot', currentProjectRoot);
+        
+        const savedSession = localStorage.getItem('socratic:ingest:session');
+        const savedLogs = localStorage.getItem('socratic:ingest:logs');
+        const savedDir = localStorage.getItem('socratic:ingest:selectedDir');
+        
+        if (savedDir) {
+          setSelectedDir(savedDir);
         }
+        if (savedSession) {
+          const session = JSON.parse(savedSession);
+          setIngestSession(session);
+          
+          // Restore logs
+          if (savedLogs) {
+            setLogLines(JSON.parse(savedLogs));
+          }
+          
+          // If session is still running, reconnect to the stream
+          if (session.status === 'running') {
+            reconnectToSession(session.id);
+          }
+        }
+      } catch (err) {
+        console.log('Error loading saved session state:', err);
       }
-    } catch (err) {
-      console.log('Error loading saved session state:', err);
-    }
+    };
+    
+    loadState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
