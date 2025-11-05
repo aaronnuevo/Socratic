@@ -102,6 +102,85 @@ export default function IngestPage() {
 
   // selection persistence handled by SelectedFilesProvider
 
+  // Load persisted session state on mount
+  useEffect(() => {
+    try {
+      const savedSession = localStorage.getItem('socratic:ingest:session');
+      const savedLogs = localStorage.getItem('socratic:ingest:logs');
+      const savedDir = localStorage.getItem('socratic:ingest:selectedDir');
+      
+      if (savedDir) {
+        setSelectedDir(savedDir);
+      }
+      if (savedSession) {
+        const session = JSON.parse(savedSession);
+        setIngestSession(session);
+        
+        // Restore logs
+        if (savedLogs) {
+          setLogLines(JSON.parse(savedLogs));
+        }
+        
+        // If session is still running, reconnect to the stream
+        if (session.status === 'running') {
+          reconnectToSession(session.id);
+        }
+      }
+    } catch (err) {
+      console.log('Error loading saved session state:', err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist selected directory when it changes
+  useEffect(() => {
+    try {
+      if (selectedDir) {
+        localStorage.setItem('socratic:ingest:selectedDir', selectedDir);
+      } else {
+        localStorage.removeItem('socratic:ingest:selectedDir');
+      }
+    } catch (err) {
+      console.log('Error saving selected directory:', err);
+    }
+  }, [selectedDir]);
+
+  // Persist ingest session when it changes
+  useEffect(() => {
+    try {
+      if (ingestSession) {
+        localStorage.setItem('socratic:ingest:session', JSON.stringify(ingestSession));
+      } else {
+        localStorage.removeItem('socratic:ingest:session');
+      }
+    } catch (err) {
+      console.log('Error saving ingest session:', err);
+    }
+  }, [ingestSession]);
+
+  // Persist log lines when they change
+  useEffect(() => {
+    try {
+      if (logLines.length > 0) {
+        localStorage.setItem('socratic:ingest:logs', JSON.stringify(logLines));
+      } else {
+        localStorage.removeItem('socratic:ingest:logs');
+      }
+    } catch (err) {
+      console.log('Error saving logs:', err);
+    }
+  }, [logLines]);
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+
   function openPicker() {
     setShowPicker(true);
     if (!currentDir && !loadingDir) {
@@ -179,6 +258,34 @@ export default function IngestPage() {
     setShowPicker(false);
   }
 
+  function reconnectToSession(sessionId) {
+    try {
+      // Close previous stream if any
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      
+      const es = new EventSource(`/api/ingest/stream?session=${encodeURIComponent(sessionId)}`);
+      eventSourceRef.current = es;
+      es.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          if (payload.type === 'log' && typeof payload.line === 'string') {
+            setLogLines((prev) => [...prev, payload.line]);
+          } else if (payload.type === 'status') {
+            setIngestSession((prev) => (prev ? { ...prev, status: payload.status || prev.status } : prev));
+          }
+        } catch {}
+      };
+      es.onerror = () => {
+        // ignore; connection issues handled by browser EventSource
+      };
+    } catch (err) {
+      console.log('Error reconnecting to session:', err);
+    }
+  }
+
   async function startIngest() {
     if (!selectedDir || (ingestSession && ingestSession.status === 'running')) return;
     try {
@@ -200,21 +307,7 @@ export default function IngestPage() {
       const sessionId = data.sessionId;
       setIngestSession({ id: sessionId, status: 'running' });
       setActiveTab('agent');
-      const es = new EventSource(`/api/ingest/stream?session=${encodeURIComponent(sessionId)}`);
-      eventSourceRef.current = es;
-      es.onmessage = (ev) => {
-        try {
-          const payload = JSON.parse(ev.data);
-          if (payload.type === 'log' && typeof payload.line === 'string') {
-            setLogLines((prev) => [...prev, payload.line]);
-          } else if (payload.type === 'status') {
-            setIngestSession((prev) => (prev ? { ...prev, status: payload.status || prev.status } : prev));
-          }
-        } catch {}
-      };
-      es.onerror = () => {
-        // ignore; connection issues handled by browser EventSource
-      };
+      reconnectToSession(sessionId);
     } catch (err) {
       setLogLines((prev) => [...prev, `[ERR] ${err?.message || 'Failed to start ingest'}`]);
     }
