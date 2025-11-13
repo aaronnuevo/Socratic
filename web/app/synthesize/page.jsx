@@ -16,8 +16,14 @@ export default function SynthesizePage() {
   const [logLines, setLogLines] = useState([]);
   const [inputText, setInputText] = useState('');
   const eventSourceRef = useRef(null);
-  const [activeTab, setActiveTab] = useState('source'); // 'source' | 'agent'
+  const [activeTab, setActiveTab] = useState('source'); // 'source' | 'agent' | 'knowledge'
   const chatContainerRef = useRef(null);
+  const [knowledgeBase, setKnowledgeBase] = useState(null); // { knowledge_units: [...] }
+  const [editedKnowledgeBase, setEditedKnowledgeBase] = useState(null);
+  const [hasKnowledgeChanges, setHasKnowledgeChanges] = useState(false);
+  const [savingKnowledge, setSavingKnowledge] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [expandedUnits, setExpandedUnits] = useState(new Set()); // Set of expanded unit IDs
 
   function parseLogLinesToMessages(lines) {
     // Parse log lines into structured messages
@@ -170,6 +176,16 @@ export default function SynthesizePage() {
           if (session.status === 'running') {
             reconnectToSession(session.id);
           }
+        }
+
+        // Check for knowledge base file
+        const kbResponse = await fetch('/api/knowledge-base');
+        const kbData = await kbResponse.json();
+        if (kbData.exists && kbData.data) {
+          setKnowledgeBase(kbData.data);
+          setEditedKnowledgeBase(kbData.data);
+          // Switch to knowledge base tab if file exists
+          setActiveTab('knowledge');
         }
       } catch (err) {
         console.log('Error loading saved session state:', err);
@@ -383,6 +399,57 @@ export default function SynthesizePage() {
     }
   }, [logLines]);
 
+  function toggleUnitExpanded(id) {
+    setExpandedUnits((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function updateKnowledgeUnit(id, field, value) {
+    setEditedKnowledgeBase((prev) => {
+      if (!prev || !prev.knowledge_units) return prev;
+      const updated = {
+        ...prev,
+        knowledge_units: prev.knowledge_units.map((unit) =>
+          unit.id === id ? { ...unit, [field]: value } : unit
+        )
+      };
+      return updated;
+    });
+    setHasKnowledgeChanges(true);
+    setSaveSuccess(false);
+  }
+
+  async function saveKnowledgeBase() {
+    if (!editedKnowledgeBase || !hasKnowledgeChanges) return;
+    setSavingKnowledge(true);
+    try {
+      const response = await fetch('/api/knowledge-base', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editedKnowledgeBase)
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data?.error || 'Failed to save');
+      }
+      setKnowledgeBase(editedKnowledgeBase);
+      setHasKnowledgeChanges(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      alert(`Failed to save: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setSavingKnowledge(false);
+    }
+  }
+
   useEffect(() => {
     if (!activePath) return;
     if (fileContents[activePath]) return;
@@ -445,9 +512,77 @@ export default function SynthesizePage() {
       <div style={styles.tabsHeader}>
         <button onClick={() => setActiveTab('source')} style={activeTab === 'source' ? styles.tabActive : styles.tab}>Source files</button>
         <button onClick={() => setActiveTab('agent')} style={activeTab === 'agent' ? styles.tabActive : styles.tab}>Agent</button>
+        <button onClick={() => setActiveTab('knowledge')} style={activeTab === 'knowledge' ? styles.tabActive : styles.tab}>Knowledge Base</button>
       </div>
 
-      {activeTab === 'source' ? (
+      {activeTab === 'knowledge' ? (
+        // Knowledge Base tab
+        <>
+          {knowledgeBase && editedKnowledgeBase ? (
+            <div>
+              <div style={styles.knowledgeBaseHeader}>
+                <button
+                  onClick={saveKnowledgeBase}
+                  disabled={!hasKnowledgeChanges || savingKnowledge}
+                  style={hasKnowledgeChanges && !savingKnowledge ? styles.buttonPrimary : styles.buttonPrimaryDisabled}
+                >
+                  {savingKnowledge ? 'Saving...' : 'Save'}
+                </button>
+                {saveSuccess && <span style={styles.saveSuccessMessage}>Saved successfully!</span>}
+              </div>
+              <div style={styles.knowledgeUnitsContainer}>
+                {editedKnowledgeBase.knowledge_units?.map((unit) => {
+                  const isExpanded = expandedUnits.has(unit.id);
+                  return (
+                    <div key={unit.id} style={styles.knowledgeUnitCard}>
+                      <div style={styles.knowledgeUnitHeaderRow}>
+                        <button
+                          onClick={() => toggleUnitExpanded(unit.id)}
+                          style={styles.expandButton}
+                        >
+                          {isExpanded ? '▼' : '▶'}
+                        </button>
+                        <div style={styles.knowledgeUnitHeaderContent} onClick={() => !isExpanded && toggleUnitExpanded(unit.id)}>
+                          <span style={styles.headingDisplay}>{unit.heading || 'Untitled'}</span>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <>
+                          <div style={styles.knowledgeUnitHeader}>
+                            <input
+                              type="text"
+                              value={unit.heading || ''}
+                              onChange={(e) => updateKnowledgeUnit(unit.id, 'heading', e.target.value)}
+                              style={styles.headingInput}
+                              placeholder="Heading"
+                            />
+                          </div>
+                          <div style={styles.knowledgeUnitBody}>
+                            <textarea
+                              value={unit.body || ''}
+                              onChange={(e) => updateKnowledgeUnit(unit.id, 'body', e.target.value)}
+                              style={styles.bodyTextarea}
+                              placeholder="Body content"
+                              rows={15}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={styles.emptyState}>
+              <div>No knowledge base found.</div>
+              <div style={{ marginTop: 8, fontSize: 14, color: '#888' }}>
+                Run the synthesize process to generate a knowledge base.
+              </div>
+            </div>
+          )}
+        </>
+      ) : activeTab === 'source' ? (
         <>
           {selectedDir ? (
             <div style={styles.selectedDirBar}>
@@ -846,5 +981,82 @@ const styles = {
     padding: '6px 10px',
     border: '1px solid #e5e7eb',
     borderRadius: 6
+  },
+  knowledgeBaseHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16
+  },
+  saveSuccessMessage: {
+    color: '#16a34a',
+    fontSize: 14,
+    fontWeight: 500
+  },
+  knowledgeUnitsContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16
+  },
+  knowledgeUnitCard: {
+    border: '1px solid #e2e2e2',
+    borderRadius: 8,
+    padding: 12,
+    background: '#fafafa'
+  },
+  knowledgeUnitHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    cursor: 'pointer'
+  },
+  expandButton: {
+    background: 'transparent',
+    border: 'none',
+    fontSize: 14,
+    cursor: 'pointer',
+    padding: '4px 8px',
+    color: '#666'
+  },
+  knowledgeUnitHeaderContent: {
+    flex: 1,
+    minWidth: 0
+  },
+  headingDisplay: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: '#111',
+    display: 'block',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  knowledgeUnitHeader: {
+    marginTop: 12,
+    marginBottom: 12
+  },
+  headingInput: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 16,
+    fontWeight: 600,
+    border: '1px solid #d1d5db',
+    borderRadius: 6,
+    background: '#ffffff'
+  },
+  knowledgeUnitBody: {
+    marginTop: 8
+  },
+  bodyTextarea: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 14,
+    lineHeight: 1.6,
+    border: '1px solid #d1d5db',
+    borderRadius: 6,
+    background: '#ffffff',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    resize: 'vertical',
+    minHeight: 120
   }
 };
