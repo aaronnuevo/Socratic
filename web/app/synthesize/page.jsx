@@ -525,6 +525,31 @@ export default function SynthesizePage() {
     }
   }
 
+  async function deleteConcept(conceptId) {
+    if (!confirm(`Are you sure you want to delete this concept?`)) return;
+    try {
+      const response = await fetch('/api/delete-concept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conceptId })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data?.error || 'Failed to delete');
+      }
+      // Reload knowledge base data
+      const kbResponse = await fetch('/api/knowledge-base');
+      const kbData = await kbResponse.json();
+      if (kbData.exists && kbData.data) {
+        setKnowledgeBase(kbData.data);
+        setEditedKnowledgeBase(kbData.data);
+        setHasKnowledgeChanges(false);
+      }
+    } catch (err) {
+      alert(`Failed to delete: ${err?.message || 'Unknown error'}`);
+    }
+  }
+
   useEffect(() => {
     if (!activePath) return;
     if (fileContents[activePath]) return;
@@ -626,6 +651,12 @@ export default function SynthesizePage() {
                           disabled={synthesizeSession && synthesizeSession.status === 'running'}
                         >
                           Modify
+                        </button>
+                        <button
+                          onClick={() => deleteConcept(unit.id)}
+                          style={styles.deleteButton}
+                        >
+                          Delete
                         </button>
                       </div>
                       {isExpanded && (
@@ -1145,6 +1176,16 @@ const styles = {
     padding: '6px 12px',
     background: '#f3f4f6',
     color: '#111',
+    border: '1px solid #e5e7eb',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 13,
+    marginLeft: 8
+  },
+  deleteButton: {
+    padding: '6px 12px',
+    background: '#f3f4f6',
+    color: '#dc2626',
     border: '1px solid #e5e7eb',
     borderRadius: 6,
     cursor: 'pointer',
