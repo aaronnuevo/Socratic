@@ -676,7 +676,7 @@ export default function SynthesizePage() {
                         >
                           {isExpanded ? '▼' : '▶'}
                         </button>
-                        <div style={styles.knowledgeUnitHeaderContent} onClick={() => !isExpanded && toggleUnitExpanded(unit.id)}>
+                        <div style={styles.knowledgeUnitHeaderContent} onClick={() => toggleUnitExpanded(unit.id)}>
                           <span style={styles.headingDisplay}>{unit.heading || 'Untitled'}</span>
                         </div>
                         <button
