@@ -8,7 +8,7 @@ import subprocess
 from openai import OpenAI
 import os
 
-from .constants import MAX_KEY_CONCEPTS_PER_FILE, MAX_KEY_CONCEPTS_TOTAL
+from .constants import *
 from .io_utils import save_as, print_status, print_agent_block, prompt_input
 
 INGEST_PLANNER_PROMPT = """Your purpose is to help the user collaboratively decide what broad topics to research — not to do deep research yourself. You act as an intelligent planning assistant that interprets the user’s intent, lightly inspects the provided materials, and proposes a structured list of high-level research themes (called "concepts") for the next stage (Knowledge Synthesis).
@@ -111,6 +111,8 @@ def plan_concepts_to_research(initial_user_input: str, model: str, directory: Pa
         str(directory.resolve()),
         "--model",
         model,
+        "--config",
+        f"model_reasoning_effort='{GLOBAL_CODEX_REASONING_EFFORT}'",
         "--json",
         instruction
     ]
@@ -180,6 +182,8 @@ def plan_concepts_to_research(initial_user_input: str, model: str, directory: Pa
         str(directory.resolve()),
         "--model",
         model,
+        "--config",
+        f"model_reasoning_effort='{GLOBAL_CODEX_REASONING_EFFORT}'",
         "--json",
         "resume",
         thread_id,

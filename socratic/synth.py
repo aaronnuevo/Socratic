@@ -10,11 +10,10 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from .constants import MAX_KEY_PROCESSES_PER_PLAYBOOK
+from .constants import *
 from .io_utils import save_as, print_status, print_agent_block, prompt_input
 from .ingest import run_ingest
 
-GLOBAL_CODEX_REASONING_EFFORT = "minimal"
 
 knowledge_units_schema = {
     "type": "object",
@@ -105,6 +104,22 @@ RESEARCH_AGENT_PROMPT = """You are an expert Senior Staff Engineer and technical
 Your task is to analyze a provided system to investigate a specific "Concept". Your output will be consumed by another AI coding agent to perform tasks, so clarity, precision, and verifiability are paramount. The downstream agent has no room for ambiguity.
 
 The Concept/topic to research: {concept}
+
+Use markdown and the following format to generate your output:
+You have the freedom to group and cluster information into high-level headings:
+
+## Heading 1
+Body of heading 1
+
+## Heading 2
+Body of heading 2
+
+...
+
+The length of each heading can vary, but each heading should be a single concept or idea. Similar to how a textbook is organized. Each heading should contain a reasonable amount of information and thus should not be too short. If too short, consider combining it with other headings.
+
+Use bullet points when appropriate. Don't overuse bullet points for everything. 
+
 
 
 # Core Philosophy
@@ -341,7 +356,7 @@ def consolidate(project_dir: Path, model: str = "gpt-5-mini"):
         "You have the freedom to merge redundant knowledge units into a single knowledge unit. Do not create new knowledge units or delete any.\n\n"
         f"Here are the JSON files to consolidate: \n {combined}"
     )
-    print(f"[DEBUG] prompt: {prompt[:500]}...")
+    # print(f"[DEBUG] prompt: {prompt[:500]}...")
 
     response = client.responses.create(
         model=model,
@@ -749,7 +764,7 @@ def delete_concept(args: argparse.Namespace, project_dir: Path) -> None:
         return
     
     # Remove by position (ID is 1-based index)
-    removed = units.pop(target_id - 1)
+    removed = units.pop(target_id)
     data = ensure_ids(data)
     save_consolidated(project_dir, data)
     print_status(f"Deleted knowledge unit ID {target_id}: '{removed.get('heading', '')}'.")

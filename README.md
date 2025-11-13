@@ -84,8 +84,14 @@ socratic-cli synth --model gpt-5 \
   --project airline_demo \
   -n 4
 
-# Add 
+# Add a concept
 socratic-cli synth --model gpt-5-mini --project airline_demo --add_concept  "modification policy" --input_dir examples/repos/tau_airline/
+
+# Modify a concept
+socratic-cli synth --model gpt-5-mini --project airline_demo --modify_concept  "lets find the procedure to determine whether a ticket can be cancelled" --concept_id 1 --input_dir examples/repos/tau_airline/
+
+# Delete a concept
+ocratic-cli synth --project airline_demo --delete_concept 1
 
 # 2. Compose agent knowledge prompt
 socratic-cli compose --project airline_demo --model gpt-5
