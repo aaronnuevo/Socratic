@@ -224,8 +224,8 @@ def build_synth_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--modify_concept",
-        type=str,
-        help="Describe how to modify a knowledge unit (stubbed for now).",
+        action="store_true",
+        help="Modify a knowledge unit interactively.",
     )
     # The ID of each knowledge unit is simple a incrementing integer starting at 0
     parser.add_argument(
@@ -537,11 +537,14 @@ def modify_concept(args: argparse.Namespace, project_dir: Path) -> None:
     # print_status(f"")
     print_agent_block(f"{requested_knowledge_units['body']}", title=f"Modifying knowledge unit {args.concept_id}: {requested_knowledge_units['heading']}")
 
+    # Prompt user for modification instructions
+    user_requirements = prompt_input("How should we modify this?")
+
     print_status(f"Agent in progress...")
 
     knowledge_unit_to_modify = f"## Knowledge Unit {args.concept_id}\n{requested_knowledge_units['body']}"
     
-    instruction = MODIFY_CONCEPT_AGENT_PROMPT.format(knowledge_unit=knowledge_unit_to_modify, user_requirements=args.modify_concept)
+    instruction = MODIFY_CONCEPT_AGENT_PROMPT.format(knowledge_unit=knowledge_unit_to_modify, user_requirements=user_requirements)
 
     # print(f"[DEBUG] modify agent instruction: {instruction}")
 
