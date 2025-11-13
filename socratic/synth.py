@@ -16,7 +16,7 @@ from .ingest import run_ingest
 
 
 
-synth_schema = {
+knowledge_units_schema = {
     "type": "object",
     "properties": {
         "knowledge_units": {
@@ -36,8 +36,49 @@ synth_schema = {
     "additionalProperties": False
 }
 
+single_knowledge_unit_schema = {
+    "type": "object",
+    "properties": {
+        "knowledge_unit": {
+            "type": "object",
+            "properties": {
+                "heading": {"type": "string"},
+                "body": {"type": "string"}
+            },
+            "required": ["heading", "body"],
+            "additionalProperties": False
+        }
+    },
+    "required": ["knowledge_unit"],
+    "additionalProperties": False
+}
 
-MODIFY_AGENT_PROMPT = """You are an expert Senior Staff Engineer and technical architect. Your primary skill is the ability to analyze complex, multi-modal systems—including code, documentation, configuration files, specifications, and other text-based artifacts—and rapidly synthesize a deep, conceptual understanding of their structure, intent, and logic.
+
+MODIFY_CONCEPT_AGENT_PROMPT = """You are an expert Senior Staff Engineer and technical architect. Your primary skill is the ability to analyze complex, multi-modal systems—including code, documentation, configuration files, specifications, and other text-based artifacts—and rapidly synthesize a deep, conceptual understanding of their structure, intent, and logic.
+
+Your task is to analyze a provided system to investigate a specific "Concept". Your output will be consumed by another AI coding agent to perform tasks, so clarity, precision, and verifiability are paramount. The downstream agent has no room for ambiguity.
+
+IMPORTANT:
+There is an existing knowledge base of concepts stored in .socratic/synth-consolidated.json. You can use this to help you understand the existing concepts and how they are related to each other. As your final output, return the knowledge unit you wish to modify to. Use markdown format, NOT JSON format.
+
+You are given one knowledge unit that need to be modified. Your goal is to modify this knowledge unit based on the user's requirements.
+
+The knowledge unit that need to be modified: {knowledge_unit}
+
+# Core Philosophy
+- Do not make up or infer any information. Only derive from the provided documents.
+- Conceptual Focus, Implementation-Aware: Explain why and how at a systems level. Your explanations must be conceptual, but grounded in real evidence: code, documents, or configuration files. Use inline file and line number references to ground your explanations.
+- Define Before Use: Avoid vague terminology. Introduce new terms only after defining them precisely.
+- Anchor Concepts to Evidence: For each conceptual element, specify the system artifact(s)—e.g., code modules, design docs, architecture diagrams, or data schemas—that embody or describe that element.
+- Verifiable Reasoning: Any logical flow or algorithm must be represented with verifiable pseudo-code or structured reasoning steps. Each must clearly map to system evidence.
+
+# Final Instructions
+- Generate your output in markdown format.
+- Do not include any other text, greetings, or sign-offs like "Here is the Playbook..." or "Would you like me to..."
+"""
+
+
+ADD_CONCEPT_AGENT_PROMPT = """You are an expert Senior Staff Engineer and technical architect. Your primary skill is the ability to analyze complex, multi-modal systems—including code, documentation, configuration files, specifications, and other text-based artifacts—and rapidly synthesize a deep, conceptual understanding of their structure, intent, and logic.
 
 Your task is to analyze a provided system to investigate a specific "Concept". Your output will be consumed by another AI coding agent to perform tasks, so clarity, precision, and verifiability are paramount. The downstream agent has no room for ambiguity.
 
@@ -130,6 +171,7 @@ def build_synth_parser() -> argparse.ArgumentParser:
         type=str,
         help="Describe how to modify a knowledge unit (stubbed for now).",
     )
+    # The ID of each knowledge unit is simple a incrementing integer starting at 0
     parser.add_argument(
         "--concept_id",
         type=int,
@@ -216,8 +258,8 @@ def convert_synth_output_to_json(synth_output: str) -> dict:
         text={
             "format": {
                 "type": "json_schema",
-                "name": "synth_schema",
-                "schema": synth_schema,
+                "name": "knowledge_units_schema",
+                "schema": knowledge_units_schema,
             }
         },
     )
@@ -264,7 +306,7 @@ def ensure_ids(data: dict) -> dict:
     Existing IDs are overwritten to keep them consistent and simple.
     """
     units = data.get("knowledge_units", [])
-    for index, unit in enumerate(units, start=1):
+    for index, unit in enumerate(units, start=0):
         if isinstance(unit, dict):
             unit["id"] = index
     return data
@@ -274,7 +316,7 @@ def consolidate(project_dir: Path, model: str = "gpt-5-mini"):
     """
     Read all concept*-synth.json files under project_dir, concatenate their raw
     contents, and ask an LLM to consolidate them into a single JSON following
-    synth_schema. Saves to project_dir / 'synth-consolidated.json'.
+    knowledge_units_schema. Saves to project_dir / 'synth-consolidated.json'.
     """
     files = sorted(project_dir.glob("concept*-synth.json"))
     if not files:
@@ -299,7 +341,6 @@ def consolidate(project_dir: Path, model: str = "gpt-5-mini"):
     )
     print(f"[DEBUG] prompt: {prompt[:500]}...")
 
-
     response = client.responses.create(
         model=model,
         reasoning={"effort": "minimal"},
@@ -307,8 +348,8 @@ def consolidate(project_dir: Path, model: str = "gpt-5-mini"):
         text={
             "format": {
                 "type": "json_schema",
-                "name": "synth_schema",
-                "schema": synth_schema,
+                "name": "knowledge_units_schema",
+                "schema": knowledge_units_schema,
             }
         },
     )
@@ -328,6 +369,181 @@ def consolidate(project_dir: Path, model: str = "gpt-5-mini"):
     save_as(json.dumps(output_json, indent=2, ensure_ascii=False), out_path)
     print_status(f"Saved consolidated synth JSON → {out_path.name}")
     return out_path
+
+
+def modify_concept(args: argparse.Namespace, project_dir: Path) -> None:
+    """Add a new knowledge unit by launching a codex agent to modify synth-consolidated.json."""
+    input_dir = Path(args.input_dir)
+    
+    # Create .socratic directory in input_dir
+    socratic_dir = input_dir / ".socratic"
+    socratic_dir.mkdir(parents=True, exist_ok=True)
+    print_status(f"Created directory: {socratic_dir}")
+    
+    # Copy consolidated file from project_dir to .socratic
+    source_file = project_dir / "synth-consolidated.json"
+    dest_file = socratic_dir / "synth-consolidated.json"
+    
+    if not source_file.exists():
+        raise SystemExit(
+            f"synth-consolidated.json not found in {project_dir}. "
+            "Run 'socratic-cli synth' first to generate it."
+        )
+    
+    shutil.copy(source_file, dest_file)
+    print_status(f"Copied {source_file} → {dest_file}")
+    
+    # Grab the requested knowledge units from the consolidated file 
+    existing_knowledge_base_file = load_consolidated(project_dir)
+    if existing_knowledge_base_file is None:
+        print_status("No consolidated synth JSON found. Run 'socratic-cli synth' to generate it first.")
+        return
+    
+    existing_knowledge_base_file = ensure_ids(existing_knowledge_base_file)
+
+    existing_knowledge_base = existing_knowledge_base_file.get("knowledge_units", [])
+    # print(f"[DEBUG] existing knowledge base: {existing_knowledge_base}")
+    # requested_knowledge_units = [unit for unit in existing_knowledge_base if unit["id"] == args.concept_id]
+    if args.concept_id < 0 or args.concept_id >= len(existing_knowledge_base):
+        raise SystemExit(f"Invalid concept ID: {args.concept_id}. Use --list_concepts to see valid IDs.")
+    requested_knowledge_units = existing_knowledge_base[args.concept_id]
+
+    # print_status(f"")
+    print_agent_block(f"{requested_knowledge_units['body']}", title=f"Modifying knowledge unit {args.concept_id}: {requested_knowledge_units['heading']}")
+
+    print_status(f"Agent in progress...")
+
+    knowledge_unit_to_modify = f"## Knowledge Unit {args.concept_id}\n{requested_knowledge_units['body']}"
+    
+    instruction = MODIFY_CONCEPT_AGENT_PROMPT.format(knowledge_unit=knowledge_unit_to_modify)
+
+    # Launch codex agent
+    env = os.environ.copy()
+    env["CODEX_API_KEY"] = os.environ["OPENAI_API_KEY"]
+    
+    # print(f"[DEBUG] modify agent instruction: {instruction}")
+    
+    command = [
+        "codex",
+        "exec",
+        "--cd",
+        str(input_dir.resolve()),
+        "--model",
+        args.model,
+        "--json",
+        instruction
+    ]
+        
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+    )
+    
+    collected_output: list[str] = []
+    
+    assert process.stdout is not None
+    for raw_line in process.stdout:
+        collected_output.append(raw_line)
+    
+    return_code = process.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, command)
+    
+    # Parse and display the initial agent message (2nd last line)
+    if len(collected_output) < 2:
+        raise ValueError("Unexpected Codex output: fewer than two lines returned.")
+    second_last_line = collected_output[-2]
+    try:
+        payload = json.loads(second_last_line)
+    except json.JSONDecodeError as error:
+        raise ValueError("Failed to parse Codex output as JSON.") from error
+    item = payload.get("item")
+    if not isinstance(item, dict):
+        raise ValueError("Codex output missing item field.")
+    text = item.get("text")
+    if not isinstance(text, str):
+        raise ValueError("Codex output missing item.text field.")
+    print_agent_block(text, title="Agent Draft")
+
+    # Extract thread_id from the first line
+    thread_start_line = collected_output[0]
+    try:
+        thread_start_obj = json.loads(thread_start_line)
+    except json.JSONDecodeError as error:
+        raise ValueError("Failed to parse Codex thread start line as JSON.") from error
+    if isinstance(thread_start_obj, dict) and thread_start_obj.get("type") == "thread.started" and "thread_id" in thread_start_obj:
+        thread_id = thread_start_obj.get("thread_id")
+    else:
+        raise ValueError(f"Unexpected Codex output: thread_id not found in the first line: {thread_start_line}")
+
+    # Interactive loop: send user feedback until DONE
+    last_text = text
+    while True:
+        user_feedback = prompt_input("Type feedback (or DONE to finish)")
+        if user_feedback.strip().upper() == "DONE":
+            break
+
+        resume_command = [
+            "codex",
+            "exec",
+            "--cd",
+            str(input_dir.resolve()),
+            "--model",
+            args.model,
+            "--json",
+            "resume",
+            thread_id,
+            user_feedback,
+        ]
+
+        print_status("Continuing agent with your input…")
+        process2 = subprocess.Popen(
+            resume_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+        )
+        resume_output: list[str] = []
+        assert process2.stdout is not None
+        for raw_line in process2.stdout:
+            resume_output.append(raw_line)
+        return_code2 = process2.wait()
+        if return_code2:
+            raise subprocess.CalledProcessError(return_code2, resume_command)
+        if len(resume_output) < 2:
+            raise ValueError("Unexpected Codex resume output: fewer than two lines returned.")
+        second_last_line2 = resume_output[-2]
+        try:
+            payload2 = json.loads(second_last_line2)
+        except json.JSONDecodeError as error:
+            raise ValueError("Failed to parse Codex resume output as JSON.") from error
+        item2 = payload2.get("item")
+        if not isinstance(item2, dict):
+            raise ValueError("Codex resume output missing item field.")
+        text2 = item2.get("text")
+        if not isinstance(text2, str):
+            raise ValueError("Codex resume output missing item.text field.")
+
+        last_text = text2
+        print_agent_block(text2, title="Agent Update")
+
+    # User issued DONE command, meaning that they are happy with the final output of the agent. So grab that, convert to JSON, and replace the existing knowledge unit with the new one.
+    print_status(f"Done. Replacing the existing knowledge unit with the new one. This may take a few seconds...")
+    knowledge_unit_to_modify = convert_synth_output_to_json(last_text)
+
+    existing_knowledge_base_file = load_consolidated(project_dir)
+    existing_knowledge_base_file = ensure_ids(existing_knowledge_base_file)
+
+    existing_knowledge_base_file["knowledge_units"][args.concept_id] = knowledge_unit_to_modify["knowledge_units"][0]
+
+    existing_knowledge_base_file = ensure_ids(existing_knowledge_base_file)
+
+    save_consolidated(project_dir, existing_knowledge_base_file)
+    print_status(f"Replaced the existing knowledge unit with the new one.")
 
 
 def add_concept(args: argparse.Namespace, project_dir: Path) -> None:
@@ -356,7 +572,7 @@ def add_concept(args: argparse.Namespace, project_dir: Path) -> None:
     env = os.environ.copy()
     env["CODEX_API_KEY"] = os.environ["OPENAI_API_KEY"]
     
-    instruction = MODIFY_AGENT_PROMPT.format(concept=args.add_concept)
+    instruction = ADD_CONCEPT_AGENT_PROMPT.format(concept=args.add_concept)
     
     command = [
         "codex",
@@ -484,15 +700,6 @@ def add_concept(args: argparse.Namespace, project_dir: Path) -> None:
     print_status(f"Added new knowledge unit(s) to the existing knowledge base.")
 
 
-def modify_concept(args: argparse.Namespace, project_dir: Path) -> None:
-    """Modify an existing knowledge unit (stub for now)."""
-    if args.concept_id is None:
-        print_status("Please provide --concept-id with --modify-concept.")
-        return
-    print_status("Modify concept is not implemented yet. This is a stub.")
-    print(f"[INFO] Target ID: {args.concept_id} | Description: {args.modify_concept}")
-
-
 def list_concepts(project_dir: Path) -> None:
     """List all knowledge units from the consolidated knowledge base."""
     data = load_consolidated(project_dir)
@@ -557,6 +764,10 @@ def run_synth(args: argparse.Namespace) -> None:
             add_concept(args, project_dir)
             return
         if args.modify_concept:
+            if not args.input_dir:
+                raise SystemExit("--input_dir is required when using --modify_concept.")
+            if not args.concept_id:
+                raise SystemExit("--concept_id is required when using --modify_concept.")
             modify_concept(args, project_dir)
             return
         if getattr(args, "list_concepts", False):
