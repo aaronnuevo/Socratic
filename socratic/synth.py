@@ -5,7 +5,6 @@ import json
 import os
 import shutil
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from openai import OpenAI
@@ -60,9 +59,11 @@ Your task is to analyze a provided system to investigate a specific "Concept". Y
 IMPORTANT:
 There is an existing knowledge base of concepts stored in .socratic/synth-consolidated.json. You can use this to help you understand the existing concepts and how they are related to each other. As your final output, return the knowledge unit you wish to modify to. Use markdown format, NOT JSON format.
 
-You are given one knowledge unit that need to be modified. Your goal is to modify this knowledge unit based on the user's requirements.
+You are given one knowledge unit that need to be modified and the user's requirements for the modification. Your goal is to modify this knowledge unit based on the user's requirements.
 
-The knowledge unit that need to be modified: {knowledge_unit}
+The knowledge unit that need to be modified: \n{knowledge_unit}
+
+The user's requirements for the modification: {user_requirements}
 
 # Core Philosophy
 - Do not make up or infer any information. Only derive from the provided documents.
@@ -99,14 +100,54 @@ The Concept/topic to research and add to the existing knowledge base: {concept}
 """
 
 
-RESEARCH_AGENT_PROMPT = """You are an expert Senior Staff Engineer and technical architect. Your primary skill is the ability to analyze complex, multi-modal systems—including code, documentation, configuration files, specifications, and other text-based artifacts—and rapidly synthesize a deep, conceptual understanding of their structure, intent, and logic.
+# RESEARCH_AGENT_PROMPT = """You are an expert Senior Staff Engineer and technical architect. Your primary skill is the ability to analyze complex, multi-modal systems—including code, documentation, configuration files, specifications, and other text-based artifacts—and rapidly synthesize a deep, conceptual understanding of their structure, intent, and logic.
 
-Your task is to analyze a provided system to investigate a specific "Concept". Your output will be consumed by another AI coding agent to perform tasks, so clarity, precision, and verifiability are paramount. The downstream agent has no room for ambiguity.
+# Your task is to analyze a provided system to investigate a specific "Concept". Your output will be consumed by another AI coding agent to perform tasks, so clarity, precision, and verifiability are paramount. The downstream agent has no room for ambiguity.
 
-The Concept/topic to research: {concept}
+# The Concept/topic to research: {concept}
 
-Use markdown and the following format to generate your output:
-You have the freedom to group and cluster information into high-level headings:
+# Use markdown and the following format to generate your output:
+# You have the freedom to group and cluster information into high-level headings:
+
+# ## Heading 1
+# Body of heading 1
+
+# ## Heading 2
+# Body of heading 2
+
+# ...
+
+# The length of each heading can vary, but each heading should be a single concept or idea. Similar to how a textbook is organized. Each heading should contain a reasonable amount of information and thus should not be too short. If too short, consider combining it with other headings.
+
+# Use bullet points when appropriate. Don't overuse bullet points for everything. 
+
+
+
+# # Core Philosophy
+# - Do not make up or infer any information. Only derive from the provided documents.
+# - Conceptual Focus, Implementation-Aware: Explain why and how at a systems level. Your explanations must be conceptual, but grounded in real evidence: code, documents, or configuration files. Use inline file and line number references to ground your explanations.
+# - Define Before Use: Avoid vague terminology. Introduce new terms only after defining them precisely.
+# - Anchor Concepts to Evidence: For each conceptual element, specify the system artifact(s)—e.g., code modules, design docs, architecture diagrams, or data schemas—that embody or describe that element.
+# - Verifiable Reasoning: Any logical flow or algorithm must be represented with verifiable pseudo-code or structured reasoning steps. Each must clearly map to system evidence.
+
+# # Final Instructions
+# - Generate your output in markdown format.
+# - Do not include any other text, greetings, or sign-offs like "Here is the Playbook...
+# """
+
+
+RESEARCH_ALL_CONCEPTS_PROMPT = """You are an expert Senior Staff Engineer and technical architect. Your primary skill is the ability to analyze complex, multi-modal systems—including code, documentation, configuration files, specifications, and other text-based artifacts—and rapidly synthesize a deep, conceptual understanding of their structure, intent, and logic.
+
+Your task is to analyze a provided system to investigate multiple key concepts and create a consolidated knowledge base. Your output will be consumed by another AI coding agent to perform tasks, so clarity, precision, and verifiability are paramount. The downstream agent has no room for ambiguity.
+
+By default, focus on high-level concepts and ideas while avoiding low-level details. If the user asks for low-level details, you should adhere to their request.
+
+The Concepts/topics to research: 
+{concepts}
+
+Output formatting:
+- Use markdown and the following format to generate your output.
+- You have the freedom to group and cluster information into high-level headings.
 
 ## Heading 1
 Body of heading 1
@@ -120,7 +161,7 @@ The length of each heading can vary, but each heading should be a single concept
 
 Use bullet points when appropriate. Don't overuse bullet points for everything. 
 
-
+Research all the provided concepts. You may organize the information in a way that makes sense for the overall system, grouping/reordering related concepts together when appropriate.
 
 # Core Philosophy
 - Do not make up or infer any information. Only derive from the provided documents.
@@ -195,11 +236,80 @@ def build_synth_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def research_concept_design(concept: str, model: str, directory: Path) -> tuple[str, str, dict]:
+# def research_concept_design(concept: str, model: str, directory: Path) -> tuple[str, str, dict]:
+#     env = os.environ.copy()
+#     env["CODEX_API_KEY"] = os.environ["OPENAI_API_KEY"]
+
+#     instruction = RESEARCH_AGENT_PROMPT.format(concept=concept)
+
+#     command = [
+#         "codex",
+#         "exec",
+#         "--cd",
+#         str(directory.resolve()),
+#         "--model",
+#         model,
+#         "--config",
+#         f"model_reasoning_effort='{GLOBAL_CODEX_REASONING_EFFORT}'",
+#         "--json",
+#         instruction,
+#         # "--output-schema",
+#         # "socratic/synth_output_schema.json"
+#     ]
+
+#     process = subprocess.Popen(
+#         command,
+#         stdout=subprocess.PIPE,
+#         stderr=subprocess.STDOUT,
+#         text=True,
+#         env=env,
+#     )
+
+#     collected_output: list[str] = []
+
+#     assert process.stdout is not None
+#     for raw_line in process.stdout:
+#         collected_output.append(raw_line)
+
+#     return_code = process.wait()
+#     if return_code:
+#         raise subprocess.CalledProcessError(return_code, command)
+
+#     if len(collected_output) < 2:
+#         raise ValueError("Unexpected Codex output: fewer than two lines returned.")
+
+#     second_last_line = collected_output[-2]
+#     resource_usage = collected_output[-1]
+#     usage_dict = json.loads(resource_usage).get("usage", {})
+
+#     try:
+#         payload = json.loads(second_last_line)
+#     except json.JSONDecodeError as error:
+#         raise ValueError("Failed to parse Codex output as JSON.") from error
+
+#     item = payload.get("item")
+#     if not isinstance(item, dict):
+#         raise ValueError("Codex output missing item field.")
+
+#     text = item.get("text")
+#     if not isinstance(text, str):
+#         raise ValueError("Codex output missing item.text field.")
+
+#     collected_output = "\n".join(collected_output)
+#     return text, collected_output, usage_dict
+
+
+def research_all_concepts(concepts: list[str], model: str, directory: Path) -> tuple[str, str, dict]:
+    """
+    Research all concepts at once using a single Codex agent call.
+    Returns the consolidated result for all concepts.
+    """
     env = os.environ.copy()
     env["CODEX_API_KEY"] = os.environ["OPENAI_API_KEY"]
 
-    instruction = RESEARCH_AGENT_PROMPT.format(concept=concept)
+    # Format concepts as a numbered list
+    concepts_text = "\n".join(f"{i}. {concept}" for i, concept in enumerate(concepts))
+    instruction = RESEARCH_ALL_CONCEPTS_PROMPT.format(concepts=concepts_text)
 
     command = [
         "codex",
@@ -212,8 +322,6 @@ def research_concept_design(concept: str, model: str, directory: Path) -> tuple[
         f"model_reasoning_effort='{GLOBAL_CODEX_REASONING_EFFORT}'",
         "--json",
         instruction,
-        # "--output-schema",
-        # "socratic/synth_output_schema.json"
     ]
 
     process = subprocess.Popen(
@@ -257,9 +365,10 @@ def research_concept_design(concept: str, model: str, directory: Path) -> tuple[
     collected_output = "\n".join(collected_output)
     return text, collected_output, usage_dict
 
+
 def convert_synth_output_to_json(synth_output: str) -> dict:
     """
-    Takes the raw text output of research_concept_design and converts it to JSON following the given schema.
+    Takes the raw text output and converts it to JSON following the given schema.
     """
     # print(f"[DEBUG] converting synth_output to JSON: {synth_output[:50]}...")
     client = OpenAI()
@@ -432,7 +541,9 @@ def modify_concept(args: argparse.Namespace, project_dir: Path) -> None:
 
     knowledge_unit_to_modify = f"## Knowledge Unit {args.concept_id}\n{requested_knowledge_units['body']}"
     
-    instruction = MODIFY_CONCEPT_AGENT_PROMPT.format(knowledge_unit=knowledge_unit_to_modify)
+    instruction = MODIFY_CONCEPT_AGENT_PROMPT.format(knowledge_unit=knowledge_unit_to_modify, user_requirements=args.modify_concept)
+
+    # print(f"[DEBUG] modify agent instruction: {instruction}")
 
     # Launch codex agent
     env = os.environ.copy()
@@ -554,12 +665,12 @@ def modify_concept(args: argparse.Namespace, project_dir: Path) -> None:
 
     # User issued DONE command, meaning that they are happy with the final output of the agent. So grab that, convert to JSON, and replace the existing knowledge unit with the new one.
     print_status(f"Done. Replacing the existing knowledge unit with the new one. This may take a few seconds...")
-    knowledge_unit_to_modify = convert_synth_output_to_json(last_text)
+    # knowledge_unit_to_modify = convert_synth_output_to_json(last_text)
 
     existing_knowledge_base_file = load_consolidated(project_dir)
     existing_knowledge_base_file = ensure_ids(existing_knowledge_base_file)
 
-    existing_knowledge_base_file["knowledge_units"][args.concept_id] = knowledge_unit_to_modify["knowledge_units"][0]
+    existing_knowledge_base_file["knowledge_units"][args.concept_id]["body"] = last_text
 
     existing_knowledge_base_file = ensure_ids(existing_knowledge_base_file)
 
@@ -826,66 +937,41 @@ def run_synth(args: argparse.Namespace) -> None:
     key_concepts = [line.strip() for line in text.splitlines() if line.strip()]
     print(f"[INFO] ### Loaded {len(key_concepts)} key concepts from file.")
 
-    token_usage_list = [
-        {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
-        for _ in key_concepts
-    ]
-    workers = max(1, args.workers)
-
-    def run_design(
-        index_and_concept: tuple[int, str]
-    ) -> tuple[int, str, tuple[str, str], dict]:
-        idx, concept = index_and_concept
-        print_status(f"Synthesizing design for concept {idx}: {concept[:50]}…")
-        research_result, _, token_usage = research_concept_design(
-            concept, args.model, directory
-        )
-        # Preview first 800 chars to avoid flooding the terminal
-        preview = research_result[:800]
-        if len(research_result) > 800:
-            preview += "\n… (truncated)"
-        print_agent_block(preview, title=f"Concept {idx} Result Preview")
-        print_status(f"Done synthesizing design for concept {idx}")
-        return idx, concept, research_result, token_usage
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {
-            executor.submit(run_design, (idx, concept)): idx
-            for idx, concept in enumerate(key_concepts)
-        }
-        for future in as_completed(futures):
-            idx, concept, research_result, token_usage = future.result()
-            token_usage_list[idx] = token_usage
-            print(f"[INFO] Token usage: {token_usage_list[idx]}")
-            text_path = project_dir / f"concept{idx}-synth.txt"
-            save_as(
-                "# Concept: " + concept + " design insights:\n\n" + research_result,
-                text_path,
-            )
-
-            # convert the research_result to JSON. structured knowledge units are easier to manage later.
-            json_result = convert_synth_output_to_json(research_result)
-            output_obj = {
-                    "header": concept,
-                    "knowledge_units": json_result.get("knowledge_units", []),
-            }
-            json_path = project_dir / f"concept{idx}-synth.json"
-            save_as(
-                json.dumps(output_obj, indent=2, ensure_ascii=False),
-                json_path,
-            )
-            print_status(
-                f"Saved results for concept {idx}: text → {text_path.name}, json → {json_path.name}"
-            )
-
-    # After all workers are done, consolidate per-concept JSON files
-    print_status("Consolidating per-concept synth JSON files into a single JSON…")
-    consolidate(project_dir, model="gpt-5-mini")
+    # Single worker: research all concepts at once
+    print_status(f"Synthesizing design for all {len(key_concepts)} concepts...")
+    research_result, _, token_usage = research_all_concepts(
+        key_concepts, args.model, directory
+    )
+    print(f"[INFO] Token usage: {token_usage}")
+    
+    # Preview first 800 chars to avoid flooding the terminal
+    preview = research_result[:800]
+    if len(research_result) > 800:
+        preview += "\n… (truncated)"
+    print_agent_block(preview, title="Consolidated Research Result Preview")
+    print_status(f"Done synthesizing design for all concepts")
+    
+    # save raw text to file
+    with open(project_dir / "synth-consolidated.txt", "w") as f:
+        f.write(research_result)
+    print_status(f"Saved results to file: {project_dir / 'synth-consolidated.txt'}")
+    
+    # Convert to JSON and save directly to synth-consolidated.json
+    print_status("Converting result to JSON format...")
+    json_result = convert_synth_output_to_json(research_result)
+    
+    # Assign ephemeral IDs
+    json_result = ensure_ids(json_result)
+    
+    # Save consolidated result
+    save_consolidated(project_dir, json_result)
+    print_status(f"Saved consolidated knowledge base → synth-consolidated.json")
 
 
 __all__ = [
     "build_synth_parser",
-    "research_concept_design",
+    # "research_concept_design",
+    "research_all_concepts",
     "consolidate",
     "add_concept",
     "modify_concept",
