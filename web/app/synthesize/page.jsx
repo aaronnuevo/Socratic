@@ -133,10 +133,33 @@ export default function SynthesizePage() {
 
   // selection persistence handled by SelectedFilesProvider
 
-  // Load persisted session state on mount
+  // Load project info and auto-load directory on mount
   useEffect(() => {
-    const loadState = async () => {
+    const loadProjectAndState = async () => {
       try {
+        // Get project info to load input_dir
+        const projectInfoResponse = await fetch('/api/project-info');
+        const projectInfo = await projectInfoResponse.json();
+        
+        if (projectInfo.inputDir) {
+          // Auto-load the input directory from project.yaml
+          const inputDir = projectInfo.inputDir;
+          
+          // Load all files from the input directory
+          const resp = await fetch(`/api/dir-files?dir=${encodeURIComponent(inputDir)}`);
+          const data = await resp.json();
+          
+          if (Array.isArray(data?.files)) {
+            setSelectedPaths(data.files);
+            setSelectedDir(inputDir);
+            if (!activePath || (data.files.length > 0 && !data.files.includes(activePath))) {
+              setActivePath(data.files[0] || null);
+            }
+          } else {
+            setSelectedDir(inputDir);
+          }
+        }
+        
         // Get current project root
         const dirResponse = await fetch('/api/dir');
         const dirData = await dirResponse.json();
@@ -159,11 +182,7 @@ export default function SynthesizePage() {
         
         const savedSession = localStorage.getItem('socratic:synthesize:session');
         const savedLogs = localStorage.getItem('socratic:synthesize:logs');
-        const savedDir = localStorage.getItem('socratic:synthesize:selectedDir');
         
-        if (savedDir) {
-          setSelectedDir(savedDir);
-        }
         if (savedSession) {
           const session = JSON.parse(savedSession);
           setSynthesizeSession(session);
@@ -189,11 +208,11 @@ export default function SynthesizePage() {
           setActiveTab('knowledge');
         }
       } catch (err) {
-        console.log('Error loading saved session state:', err);
+        console.log('Error loading project and session state:', err);
       }
     };
     
-    loadState();
+    loadProjectAndState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -753,8 +772,8 @@ export default function SynthesizePage() {
           </div>
 
           {!hasSelection ? (
-            <div style={styles.emptyPicker} onClick={openPicker}>
-              <div>Click to select directory</div>
+            <div style={styles.emptyState}>
+              <div>Loading source files...</div>
             </div>
           ) : (
             <div style={styles.paneContainer}>

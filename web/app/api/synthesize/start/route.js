@@ -24,7 +24,6 @@ export async function POST(req) {
       '-u', // Unbuffered output for real-time streaming
       '-m', 'socratic.cli', 'synth',
       '--model', DEFAULT_MODEL,
-      '--input_dir', inputDir,
       '--project', projectName
     ];
     

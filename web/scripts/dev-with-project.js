@@ -25,6 +25,14 @@ const projectsDir = path.join(repoRoot, 'projects');
 const projectDir = path.join(projectsDir, projectName);
 const webDir = path.resolve(__dirname, '..');
 
+// Check if project.yaml exists
+const projectYamlPath = path.join(projectDir, 'project.yaml');
+if (!fs.existsSync(projectYamlPath)) {
+  console.error(`\nError: Project not created yet.`);
+  console.error(`Use 'socratic-cli create --name ${projectName} --input_dir {dir}' to create the project first.\n`);
+  process.exit(1);
+}
+
 // Ensure project directory exists
 fs.mkdirSync(projectDir, { recursive: true });
 
