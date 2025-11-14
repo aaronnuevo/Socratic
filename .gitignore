@@ -2,6 +2,7 @@ playbooks/
 old/
 socratic_cli.egg-info/
 socratic/__pycache__/
+examples/
 tmp/
 projects/
 dist/
