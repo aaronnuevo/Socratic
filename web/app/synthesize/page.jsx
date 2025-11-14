@@ -796,7 +796,7 @@ export default function SynthesizePage() {
                 </div>
               </div>
               <div style={styles.rightPane}>
-                <div style={styles.rightHeader}>{activePath || 'No file selected'}</div>
+                <div style={styles.rightHeader}>{activePath ? activePath.split('/').pop() : 'No file selected'}</div>
                 <div style={styles.viewer}>
                   {activePath ? (
                     loadingContent && !fileContents[activePath] ? (
@@ -876,12 +876,12 @@ const styles = {
     marginBottom: 8
   },
   selectedDirLabel: {
-    color: '#555'
+    color: '#555',
+    fontSize: 14
   },
   selectedDirValue: {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-    fontSize: 12,
-    color: '#333'
+    fontSize: 14,
+    color: '#555'
   },
   synthesizeBar: {
     display: 'flex',
@@ -941,7 +941,8 @@ const styles = {
     justifyContent: 'space-between',
     padding: '8px 12px',
     borderBottom: '1px solid #eee',
-    background: '#fafafa'
+    background: '#fafafa',
+    fontSize: 14
   },
   leftList: {
     overflow: 'auto'
@@ -951,7 +952,8 @@ const styles = {
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
+    fontSize: 13
   },
   listItemActive: {
     padding: '8px 12px',
@@ -959,7 +961,8 @@ const styles = {
     background: '#eef3ff',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
+    fontSize: 13
   },
   rightPane: {
     border: '1px solid #e2e2e2',
@@ -974,7 +977,9 @@ const styles = {
     background: '#fafafa',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    textOverflow: 'ellipsis',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontSize: 13
   },
   viewer: {
     height: 520,
