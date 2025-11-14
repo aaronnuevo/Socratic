@@ -7,6 +7,10 @@ async function listFilesRecursive(rootDir) {
   async function walk(currentDir) {
     const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
     for (const entry of entries) {
+      // Skip .socratic directory
+      if (entry.name === '.socratic') {
+        continue;
+      }
       const entryPath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
         await walk(entryPath);

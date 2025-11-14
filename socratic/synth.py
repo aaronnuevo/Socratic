@@ -643,6 +643,10 @@ def modify_concept(args: argparse.Namespace, project_dir: Path, input_dir: Path)
 
     save_consolidated(project_dir, existing_knowledge_base_file)
     print_status(f"Replaced the existing knowledge unit with the new one.")
+    
+    # Clean up temporary file in source file directory
+    dest_file.unlink()
+    # print_status(f"Cleaned up temporary file: {dest_file}")
 
 
 def add_concept(args: argparse.Namespace, project_dir: Path, input_dir: Path) -> None:
@@ -814,6 +818,9 @@ def add_concept(args: argparse.Namespace, project_dir: Path, input_dir: Path) ->
     existing_knowledge_base_file = ensure_ids(existing_knowledge_base_file)
     save_consolidated(project_dir, existing_knowledge_base_file)
     print_status(f"Added new knowledge unit(s) to the existing knowledge base.")
+
+    # Clean up temporary file in source file directory
+    dest_file.unlink()
 
 
 def list_concepts(project_dir: Path) -> None:
