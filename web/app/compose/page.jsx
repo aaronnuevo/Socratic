@@ -20,6 +20,7 @@ export default function ComposePage() {
   const [selectedPromptName, setSelectedPromptName] = useState(null);
   const [loadingKB, setLoadingKB] = useState(false);
   const [kbKeysBeforeCompose, setKbKeysBeforeCompose] = useState(null); // Track KB keys before compose starts
+  const [deletingPrompt, setDeletingPrompt] = useState(null); // Track which prompt is being deleted
   const eventSourceRef = useRef(null);
 
   // Load persisted state on mount
@@ -296,6 +297,38 @@ export default function ComposePage() {
     }
   }
 
+  async function deletePrompt(promptName) {
+    if (!window.confirm(`Are you sure you want to delete "${promptName}"?`)) {
+      return;
+    }
+
+    setDeletingPrompt(promptName);
+    try {
+      const response = await fetch('/api/compose/kb/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promptName })
+      });
+
+      if (response.ok) {
+        // If the deleted prompt was selected, clear selection
+        if (selectedPromptName === promptName) {
+          setSelectedPromptName(null);
+        }
+        // Reload KB data to reflect the deletion
+        await loadKBData(false);
+      } else {
+        const data = await response.json();
+        alert(`Failed to delete prompt: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error deleting prompt:', err);
+      alert(`Error deleting prompt: ${err.message}`);
+    } finally {
+      setDeletingPrompt(null);
+    }
+  }
+
   function toggleUnit(index) {
     setSelectedUnits((prev) => {
       const next = new Set(prev);
@@ -565,11 +598,26 @@ export default function ComposePage() {
                   {Object.keys(kbData).map((name) => (
                     <div
                       key={name}
-                      onClick={() => setSelectedPromptName(name)}
                       style={name === selectedPromptName ? styles.listItemActive : styles.listItem}
                       title={name}
                     >
-                      {name}
+                      <div
+                        onClick={() => setSelectedPromptName(name)}
+                        style={styles.listItemText}
+                      >
+                        {name}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deletePrompt(name);
+                        }}
+                        disabled={deletingPrompt === name}
+                        style={styles.deleteButton}
+                        title="Delete this prompt"
+                      >
+                        {deletingPrompt === name ? '...' : '×'}
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -853,20 +901,42 @@ const styles = {
   },
   listItem: {
     padding: '8px 12px',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    fontSize: 13
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    fontSize: 13,
+    borderBottom: '1px solid transparent'
   },
   listItemActive: {
     padding: '8px 12px',
-    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
     background: '#eef3ff',
+    fontSize: 13,
+    borderBottom: '1px solid transparent'
+  },
+  listItemText: {
+    flex: 1,
+    cursor: 'pointer',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    fontSize: 13
+    textOverflow: 'ellipsis'
+  },
+  deleteButton: {
+    padding: '2px 8px',
+    backgroundColor: '#fee',
+    color: '#c00',
+    border: '1px solid #fcc',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    lineHeight: '1',
+    transition: 'background-color 0.2s',
+    flexShrink: 0
   },
   rightPane: {
     border: '1px solid #e2e2e2',
