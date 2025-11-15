@@ -141,7 +141,7 @@ Now, please process the following JSON list of knowledge units and generate the 
 
     response = client.responses.create(
         model=model,
-        reasoning={"effort": "low"},
+        reasoning={"effort": "none"},
         input=prompt
     )
 
