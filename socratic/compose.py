@@ -103,12 +103,106 @@ def _select_knowledge_units_interactive(
         return []
 
 
-def compose_prompt(selected_units: list[dict], model: str, project_dir: Path) -> None:
+def _load_kbs_json(project_dir: Path) -> dict:
+    """
+    Load existing socratic_kbs.json from project directory.
+    
+    Returns an empty dict if file doesn't exist.
+    """
+    kbs_file = project_dir / "socratic_kbs.json"
+    if not kbs_file.exists():
+        return {}
+    
+    try:
+        with open(kbs_file, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"[WARNING] Failed to parse {kbs_file}: {e}. Starting with empty dict.")
+        return {}
+    except Exception as e:
+        print(f"[WARNING] Error reading {kbs_file}: {e}. Starting with empty dict.")
+        return {}
+
+
+def _save_kbs_json(project_dir: Path, data: dict) -> None:
+    """
+    Save data to socratic_kbs.json in project directory.
+    """
+    kbs_file = project_dir / "socratic_kbs.json"
+    try:
+        with open(kbs_file, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERROR] Failed to save {kbs_file}: {e}")
+        raise
+
+
+def _check_name_exists(project_dir: Path, name: str) -> bool:
+    """
+    Check if the given name already exists in socratic_kbs.json.
+    """
+    kbs_data = _load_kbs_json(project_dir)
+    return name in kbs_data
+
+
+def _generate_python_file(project_dir: Path, kbs_data: dict) -> None:
+    """
+    Generate socratic_kbs.py from the knowledge base JSON data.
+    
+    Backs up existing file to socratic_kbs.py.old if it exists.
+    """
+    py_file = project_dir / "socratic_kbs.py"
+    py_old_file = project_dir / "socratic_kbs.py.old"
+    
+    # Backup existing file if it exists
+    if py_file.exists():
+        # Remove old backup if it exists
+        if py_old_file.exists():
+            py_old_file.unlink()
+        # Rename current file to .old
+        py_file.rename(py_old_file)
+        print(f"[INFO] Backed up existing socratic_kbs.py to socratic_kbs.py.old")
+    
+    # Generate Python file content
+    lines = [
+        '"""Auto-generated file containing knowledge base prompts.',
+        '',
+        'This file is generated from socratic_kbs.json.',
+        'Do not edit manually - changes will be overwritten.',
+        '',
+        'Usage:',
+        '    from socratic_kbs import prompts',
+        '    print(prompts["your_prompt_name"])',
+        '"""',
+        '',
+        'prompts = {',
+    ]
+    
+    # Add each prompt as a dictionary entry
+    for key, value in kbs_data.items():
+        # Escape backslashes and quotes for Python string literal
+        escaped_value = value.replace('\\', '\\\\').replace('"""', r'\"\"\"')
+        lines.append(f'    "{key}": """{escaped_value}""",')
+    
+    lines.append('}')
+    
+    # Write the file
+    content = '\n'.join(lines)
+    with open(py_file, 'w') as f:
+        f.write(content)
+    
+    print(f"[INFO] Generated {py_file} with {len(kbs_data)} prompt(s)")
+
+
+def compose_prompt(selected_units: list[dict], model: str, project_dir: Path, output_name: str) -> None:
     """
     Compose a prompt using the selected knowledge units.
     
     Args:
         selected_units: List of knowledge unit dictionaries selected by the user
+        model: OpenAI model to use
+        project_dir: Project directory path
+        output_name: Name for the output files
     """
     print(f"\n[INFO] Composing with {len(selected_units)} selected knowledge units:")
     
@@ -131,8 +225,8 @@ Be precise: Your primary goal is to retain all specific details, calculations, t
 
 ## Transformation rules
 Do not make up or infer any information. Only derive from the provided knowledge units.
-Don’t expose internal citations/filenames (e.g., wiki.md:34) in user-visible messaging. Those are provenance for the agent only.
-Respect scope. Output only the snippet; do not add “You are…”, system/meta instructions, or formatting fences.
+Don't expose internal citations/filenames (e.g., wiki.md:34) in user-visible messaging. Those are provenance for the agent only.
+Respect scope. Output only the snippet; do not add "You are…", system/meta instructions, or formatting fences.
 Tone: concise, neutral, and clear; avoid legalese unless mandated by a policy.
 
 Now, please process the following JSON list of knowledge units and generate the complete prompt snippet based on all the rules specified above.
@@ -146,9 +240,19 @@ Now, please process the following JSON list of knowledge units and generate the 
     )
 
     print("\n[INFO] Compose process completed.")
-    cur_time = datetime.now().isoformat(timespec="seconds")
-    save_as(response.output_text, project_dir / f"compose-{cur_time}.md")
-    print(f"\n[INFO] Compose result saved to {project_dir / f'compose-{cur_time}.md'}")
+    
+    # Save to socratic_kbs.json first
+    kbs_data = _load_kbs_json(project_dir)
+    kbs_data[output_name] = response.output_text
+    _save_kbs_json(project_dir, kbs_data)
+    print(f"[INFO] Saved to socratic_kbs.json with key '{output_name}'")
+    
+    # Generate Python file from all knowledge base entries
+    _generate_python_file(project_dir, kbs_data)
+    
+    # Then save markdown file
+    save_as(response.output_text, project_dir / f"{output_name}.md")
+    print(f"[INFO] Compose result saved to {project_dir / f'{output_name}.md'}")
 
     # Print token usage
     if hasattr(response, 'usage') and response.usage:
@@ -178,6 +282,16 @@ def build_compose_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to JSON file containing pre-selected knowledge units (for web UI mode). If not provided, uses interactive terminal selection.",
     )
+    parser.add_argument(
+        "--export-format",
+        default="markdown",
+        help="Export format for the output (default: markdown).",
+    )
+    parser.add_argument(
+        "--output-name",
+        default=None,
+        help="Name for the output file. If not provided, uses current datetime.",
+    )
     return parser
 
 
@@ -192,6 +306,16 @@ def run_compose(args: argparse.Namespace) -> None:
             f"Project '{args.project}' not found under projects/. Please create 'projects/{args.project}' and try again."
         )
     print(f"[INFO] Compose command with project: {args.project}, model: {args.model}")
+    
+    # Determine output name
+    if args.output_name:
+        output_name = args.output_name
+    else:
+        output_name = datetime.now().isoformat(timespec="seconds")
+    
+    # Check if name already exists in socratic_kbs.json
+    if _check_name_exists(project_dir, output_name):
+        raise SystemExit(f"[ERROR] Output name '{output_name}' already exists in socratic_kbs.json. Please choose a different name.")
     
     # Check if units are provided via JSON file (web UI mode) or need interactive selection (terminal mode)
     if args.units_json_file:
@@ -227,7 +351,7 @@ def run_compose(args: argparse.Namespace) -> None:
             return
     
     # Pass selected units to compose_prompt
-    compose_prompt(selected_units, args.model, project_dir)
+    compose_prompt(selected_units, args.model, project_dir, output_name)
 
 
 __all__ = [
