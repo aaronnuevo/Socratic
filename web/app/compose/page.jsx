@@ -21,6 +21,7 @@ export default function ComposePage() {
   const [loadingKB, setLoadingKB] = useState(false);
   const [kbKeysBeforeCompose, setKbKeysBeforeCompose] = useState(null); // Track KB keys before compose starts
   const [deletingPrompt, setDeletingPrompt] = useState(null); // Track which prompt is being deleted
+  const [copyPromptSuccess, setCopyPromptSuccess] = useState(false);
   const eventSourceRef = useRef(null);
 
   // Load persisted state on mount
@@ -329,6 +330,20 @@ export default function ComposePage() {
     }
   }
 
+  async function copyPromptToClipboard() {
+    if (!selectedPromptName || !kbData || !kbData[selectedPromptName]) {
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(kbData[selectedPromptName]);
+      setCopyPromptSuccess(true);
+      setTimeout(() => setCopyPromptSuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }
+
   function toggleUnit(index) {
     setSelectedUnits((prev) => {
       const next = new Set(prev);
@@ -624,7 +639,12 @@ export default function ComposePage() {
               </div>
               <div style={styles.rightPane}>
                 <div style={styles.rightHeader}>
-                  {selectedPromptName || 'No prompt selected'}
+                  <span>{selectedPromptName || 'No prompt selected'}</span>
+                  {selectedPromptName && kbData && kbData[selectedPromptName] && (
+                    <button onClick={copyPromptToClipboard} style={styles.copyButton}>
+                      {copyPromptSuccess ? '✓ Copied!' : 'Copy'}
+                    </button>
+                  )}
                 </div>
                 <div style={styles.viewer}>
                   {selectedPromptName && kbData[selectedPromptName] ? (
@@ -949,11 +969,12 @@ const styles = {
     padding: '8px 12px',
     borderBottom: '1px solid #eee',
     background: '#fafafa',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
     fontSize: 13,
-    fontWeight: 500
+    fontWeight: 500,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px'
   },
   viewer: {
     height: 520,
