@@ -233,9 +233,10 @@ Now, please process the following JSON list of knowledge units and generate the 
 
 {formatted_units}"""
 
+    print(f"[INFO] sending compose prompt to model")
     response = client.responses.create(
         model=model,
-        reasoning={"effort": "none"},
+        reasoning={"effort": "none"} if model == "gpt-5.1" else {"effort": "minimal"},
         input=prompt
     )
 
@@ -274,7 +275,7 @@ def build_compose_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        default="gpt-5.1",
+        default="gpt-5", # not using gpt-5.1 because it's sometimes very slow
         help="OpenAI model to use.",
     )
     parser.add_argument(
