@@ -1,5 +1,7 @@
 # Your GitHub Learning Lab Repository for Introducing GitHub
 
+[![SafeSkill 77/100](https://img.shields.io/badge/SafeSkill-77%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/aaronnuevo-socratic)
+
 Welcome to **your** repository for your GitHub Learning Lab course. This repository will be used during the different activities that I will be guiding you through. See a word you don't understand? We've included an emoji 📖 next to some key terms. Click on it to see its definition.
 
 Oh! I haven't introduced myself...
